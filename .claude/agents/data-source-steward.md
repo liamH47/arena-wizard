@@ -22,6 +22,12 @@ actually run, showing the arithmetic.
   stays off until `docs/decisions/` records a yes (see decision 0002).
 - **17Lands embargo:** third-party tools should not present a new set's data until its
   12th day on Arena. `SetConfig.embargo_until` is release plus 11 days (FRA: 2026-10-10).
+- **Manual captures (decision 0005, owner override):** a person may capture a 17Lands page
+  by screenshot or copied table, at most once per set, format, and UTC day, only until the
+  data is available another permitted way, kept private and labelled. You dissented and
+  were overruled; enforce the limits exactly rather than re-arguing the decision. Flag
+  any automation of the capture, any second capture per day, any capture data reaching
+  the repo, eval report, fixtures, or logs, and any capture for a set whose file exists.
 - **17Lands attribution:** visible at the top level with links, never only in a footnote;
   never imply endorsement.
 - **Scryfall:** `/cards/search`, `/cards/named`, `/cards/random`, and `/cards/collection` 2
