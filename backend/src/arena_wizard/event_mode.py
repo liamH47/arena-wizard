@@ -112,6 +112,14 @@ def _game_range(snapshot: Snapshot) -> str:
     )
 
 
+WEB_HOW = {
+    "direct": "Add it on the Pastes page: 17Lands card data, Arena Direct Sealed.",
+    "draft": "Add it on the Pastes page: 17Lands card data, Premier Draft (sign in to 17Lands).",
+    "grades": "Add it on the Pastes page: one reviewer's grades per paste.",
+    "public": "17Lands publishes it weeks after release; the app loads it then.",
+}
+
+
 def data_block(
     config: SetConfig,
     event: EventScoring,
@@ -120,8 +128,48 @@ def data_block(
     curated: tuple[CuratedBomb, ...],
     today: dt.date,
     public_embargoed: bool,
+    web: bool = False,
 ) -> list[str]:
-    """What this build rests on, what is missing, and how to add it."""
+    """What this build rests on, what is missing, and how to add it.
+
+    `web` turns the CLI commands into directions to the web app's Pastes page, because a
+    friend on the web cannot run the CLI and its pastes live in another store.
+    """
+    lines = _data_block(config, event, sources, scores, curated, today, public_embargoed)
+    if not web:
+        return lines
+    replaced = []
+    skip = False
+    for line in lines:
+        if skip:
+            skip = False
+            continue
+        if "missing  Copy" in line:
+            replaced.append(line.split("missing")[0] + "missing  " + WEB_HOW["direct"])
+            skip = True
+        elif "missing  Sign in to 17Lands" in line:
+            replaced.append(line.split("missing")[0] + "missing  " + WEB_HOW["draft"])
+            skip = True
+        elif line.startswith("  Grades       missing"):
+            replaced.append("  Grades       missing  " + WEB_HOW["grades"])
+        elif line.startswith("  Public file"):
+            status = "embargoed" if public_embargoed else "missing"
+            replaced.append(f"  Public file  {status:8} {WEB_HOW['public']}")
+        else:
+            replaced.append(line)
+    return replaced
+
+
+def _data_block(
+    config: SetConfig,
+    event: EventScoring,
+    sources: Sources,
+    scores: GradeScores | None,
+    curated: tuple[CuratedBomb, ...],
+    today: dt.date,
+    public_embargoed: bool,
+) -> list[str]:
+    """The Data block with the CLI's commands."""
     code = config.code
     lines = [f"{code} data for this build ({code} reached Arena {config.arena_release_date}):"]
     if sources.direct is not None:
@@ -211,7 +259,24 @@ def _deck_lines(rank: int, deck: ScoredDeck, show_values: bool) -> list[str]:
     return lines
 
 
-def build_event(
+NO_VALUES = (
+    "No card values for {code}, so no deck is ranked. Rarity averages alone cannot tell one "
+    "common from another, so a ranking would mostly reflect deck shape. Add draft grades or "
+    "card win rates as described above."
+)
+NO_DECK = "No color pair has enough castable spells for a 40-card deck."
+
+
+@dataclass(frozen=True, slots=True)
+class EventResult:
+    """An event-mode build: its Data block, its ranked decks, or why there are none."""
+
+    data_lines: tuple[str, ...]
+    decks: tuple[ScoredDeck, ...]
+    refusal: str | None
+
+
+def event_result(
     config: SetConfig,
     pool: Pool,
     rarity_of: dict[str, Rarity],
@@ -220,9 +285,9 @@ def build_event(
     curated: tuple[CuratedBomb, ...],
     today: dt.date,
     public_embargoed: bool,
-    echo: Echo,
-) -> int:
-    """Rank decks in event mode and print them after the Data block."""
+    web: bool = False,
+) -> EventResult:
+    """Rank decks in event mode. Pure: the CLI prints the result, the web app stores it."""
     scores = grade_scores(grade_inputs(sources.grades), rarity_of)
     proxy: DataLayer | None = data_layer("draft data", sources.proxy, rarity_of, True)
     direct = (
@@ -235,24 +300,39 @@ def build_event(
         if sources.direct
         else None
     )
-    for line in data_block(
-        config, scoring.event, sources, scores, curated, today, public_embargoed
-    ):
-        echo(line)
+    lines = tuple(
+        data_block(config, scoring.event, sources, scores, curated, today, public_embargoed, web)
+    )
     if scores is None and proxy is None and direct is None:
-        echo("")
-        echo(
-            f"No card values for {config.code}, so no deck is ranked. Rarity averages alone "
-            "cannot tell one common from another, so a ranking would mostly reflect deck "
-            "shape. Add draft grades or card win rates with the commands above."
-        )
-        return 1
+        return EventResult(lines, (), NO_VALUES.format(code=config.code))
     inputs = prepare_event_inputs(pool, scores, proxy, direct, scoring, curated)
     decks = describe_event(build_decks(pool, inputs).decks, inputs.bombs, bool(curated))
-    if not decks:
-        echo("No color pair has enough castable spells for a 40-card deck.")
+    return EventResult(lines, decks, None if decks else NO_DECK)
+
+
+def build_event(
+    config: SetConfig,
+    pool: Pool,
+    rarity_of: dict[str, Rarity],
+    sources: Sources,
+    scoring: ScoringConfig,
+    curated: tuple[CuratedBomb, ...],
+    today: dt.date,
+    public_embargoed: bool,
+    echo: Echo,
+) -> int:
+    """Rank decks in event mode and print them after the Data block."""
+    result = event_result(
+        config, pool, rarity_of, sources, scoring, curated, today, public_embargoed
+    )
+    for line in result.data_lines:
+        echo(line)
+    if result.refusal is not None:
+        if not result.decks and result.refusal != NO_DECK:
+            echo("")
+        echo(result.refusal)
         return 1
-    for rank, deck in enumerate(decks, start=1):
+    for rank, deck in enumerate(result.decks, start=1):
         echo("")
         for line in _deck_lines(rank, deck, show_values=rank == 1):
             echo(line)

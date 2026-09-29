@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,7 +33,6 @@ from arena_wizard.pastes.store import (
     PasteKey,
     StoredPaste,
     delete_paste,
-    from_json,
     read_pastes,
     source_label,
     write_paste,
@@ -60,10 +59,11 @@ class PasteRequest:
 
 
 def covered_event_types(config: SetConfig, cache: Path, today: dt.date) -> frozenset[EventType]:
-    """Event types whose public file is cached and past the embargo (0005, rule 4)."""
+    """Event types whose public file is published or cached, past the embargo (0005 rule 4)."""
     if today < config.embargo_until:
         return frozenset()
-    return frozenset(e for e in PUBLIC_EVENT_TYPES if counts_path(cache, config.code, e).is_file())
+    cached = {e for e in PUBLIC_EVENT_TYPES if counts_path(cache, config.code, e).is_file()}
+    return frozenset(cached | set(config.public_files))
 
 
 def text_sha256(text: str) -> str:
@@ -103,37 +103,52 @@ def _check_request(request: PasteRequest) -> None:
         raise _Refused("grades take no --event-type")
 
 
-def paste(
+class PasteRejected(ValueError):
+    """A paste failed a check; the message says why, and nothing was stored."""
+
+
+@dataclass(frozen=True, slots=True)
+class PastePlan:
+    """A checked paste, ready to store, and what to tell the person about it."""
+
+    new: StoredPaste
+    old: StoredPaste | None
+    unknown: tuple[str, ...]
+    warnings: tuple[str, ...]
+
+
+def plan_paste(
     request: PasteRequest,
     data: bytes,
     config: SetConfig,
-    data_dir: Path,
-    cache: Path,
     today: dt.date,
+    covered: frozenset[EventType],
+    stored: Sequence[StoredPaste],
     decode: Callable[[bytes], str],
-    echo: Echo,
-) -> int:
-    """Parse, check, and store one paste. Nothing is written unless every check passes.
+) -> PastePlan:
+    """Parse and check one paste against what is already stored. Writes nothing.
+
+    Shared by the CLI's file store and the web app's database, so both refuse the same
+    things with the same words.
 
     Args:
         request: What the person typed.
-        data: The pasted bytes, from a file or stdin.
+        data: The pasted bytes.
         config: The set's configuration.
-        data_dir: The private data directory.
-        cache: The download cache, to see which public files the engine already reads.
         today: The UTC day, which is the paste's key.
+        covered: Event types whose public file replaces pastes (0005, rule 4).
+        stored: Every paste already stored for the set.
         decode: Turns bytes into text whatever tool saved them.
-        echo: Where messages go.
 
-    Returns:
-        0 when stored or unchanged, 1 when refused.
+    Raises:
+        PasteRejected: The paste fails a check.
     """
     try:
         _check_request(request)
         copied_on = _dates(request, config, today)
         if len(data) > MAX_BYTES:
             raise _Refused(f"the paste is over {MAX_BYTES:,} bytes; export one set's table")
-        if request.event_type in covered_event_types(config, cache, today):
+        if request.event_type in covered:
             raise _Refused(
                 f"the 17Lands public {request.event_type} file for {config.code} is already "
                 "cached, and permitted automated data replaces pastes (decision 0005, rule 4)"
@@ -162,21 +177,18 @@ def paste(
             )
             columns, unknown, grade_rows = (grade_table.column,), grades.unknown, grades.rows
     except (UnknownSource, ShapeError, PasteRefused, _Refused) as error:
-        echo(f"Refused, nothing stored: {error}.")
-        return 1
+        raise PasteRejected(str(error)) from None
     sha = text_sha256(text)
     key = PasteKey(config.code, request.dataset, request.event_type, request.source_id, today)
-    stored, _ = read_pastes(data_dir, config.code)
     twin = next(
         (p for p in stored if p.text_sha256 == sha and p.key.source_id != request.source_id),
         None,
     )
     if twin is not None:
-        echo(
-            f"Refused, nothing stored: this is the same text as the {twin.label} paste from "
-            f"{twin.key.import_day}; one source's grades counted twice would double its weight."
+        raise PasteRejected(
+            f"this is the same text as the {twin.label} paste from {twin.key.import_day}; one "
+            "source's grades counted twice would double its weight"
         )
-        return 1
     new = StoredPaste(
         key=key,
         label=source_for(request.source_id).label,
@@ -189,33 +201,78 @@ def paste(
         card_rows=card_rows,
         grade_rows=grade_rows,
     )
-    path = key.path(data_dir)
-    old = from_json(path.read_text(encoding="utf-8")) if path.is_file() else None
+    old = next((p for p in stored if p.key == key), None)
     if old is not None and new.row_count * 2 < old.row_count and not request.replace:
-        echo(
-            f"Refused, nothing stored: today's {old.label} paste has {old.row_count} rows and "
-            f"this one has {new.row_count}. Pass --replace if the smaller paste is right."
+        raise PasteRejected(
+            f"today's {old.label} paste has {old.row_count} rows and this one has "
+            f"{new.row_count}. Replace it anyway if the smaller paste is right"
         )
-        return 1
-    if not write_paste(data_dir, new):
-        echo("Identical to today's stored paste from this source; nothing changed.")
-        return 0
+    return PastePlan(new, old, unknown, warnings)
+
+
+def outcome_lines(
+    plan: PastePlan, written: bool, where: str, request: PasteRequest, web: bool = False
+) -> list[str]:
+    """What to tell the person after a paste, for the CLI and the web app alike."""
+    if not written:
+        return ["Identical to today's stored paste from this source; nothing changed."]
+    new, old = plan.new, plan.old
     verb = "Replaced today's paste" if old is not None else "Stored"
-    echo(
+    lines = [
         f"{verb}: {source_label(new)}, {new.row_count} rows"
         + (f" (was {old.row_count})" if old is not None else "")
-        + f". Kept privately in {data_dir}; never committed. sha256 {sha[:16]}."
-    )
+        + f". Kept privately {where}; never committed. sha256 {new.text_sha256[:16]}."
+    ]
     if request.copied_on is None:
-        echo(
-            f"Copied-on defaulted to today, {today} UTC; pass --copied-on if you copied it earlier."
+        how = "set Copied on" if web else "pass --copied-on"
+        lines.append(
+            f"Copied-on defaulted to today, {new.key.import_day} UTC; {how} if you copied it "
+            "earlier."
         )
-    if unknown:
-        shown = ", ".join(repr(n) for n in unknown[:5])
-        more = f", and {len(unknown) - 5} more" if len(unknown) > 5 else ""
-        echo(f"{len(unknown)} names are not {config.code} cards and were skipped: {shown}{more}.")
-    for warning in warnings:
-        echo(warning)
+    if plan.unknown:
+        shown = ", ".join(repr(n) for n in plan.unknown[:5])
+        more = f", and {len(plan.unknown) - 5} more" if len(plan.unknown) > 5 else ""
+        lines.append(
+            f"{len(plan.unknown)} names are not {new.key.set_code} cards and were skipped: "
+            f"{shown}{more}."
+        )
+    return lines + list(plan.warnings)
+
+
+def paste(
+    request: PasteRequest,
+    data: bytes,
+    config: SetConfig,
+    data_dir: Path,
+    cache: Path,
+    today: dt.date,
+    decode: Callable[[bytes], str],
+    echo: Echo,
+) -> int:
+    """Parse, check, and store one paste in the private data directory.
+
+    Nothing is written unless every check passes.
+
+    Returns:
+        0 when stored or unchanged, 1 when refused.
+    """
+    stored, _ = read_pastes(data_dir, config.code)
+    try:
+        plan = plan_paste(
+            request,
+            data,
+            config,
+            today,
+            covered_event_types(config, cache, today),
+            stored,
+            decode,
+        )
+    except PasteRejected as error:
+        echo(f"Refused, nothing stored: {error}.")
+        return 1
+    written = write_paste(data_dir, plan.new)
+    for line in outcome_lines(plan, written, f"in {data_dir}", request):
+        echo(line)
     return 0
 
 
