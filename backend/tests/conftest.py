@@ -71,4 +71,4 @@ class ChunkedBody(httpx.SyncByteStream):
 
 def gzip_csv(lines: list[str]) -> bytes:
     """Gzip CSV lines the way 17Lands publishes them: UTF-8, LF endings."""
-    return gzip.compress(("\n".join(lines) + "\n").encode("utf-8"))
+    return gzip.compress(("\n".join(lines) + "\n").encode("utf-8"), mtime=0)

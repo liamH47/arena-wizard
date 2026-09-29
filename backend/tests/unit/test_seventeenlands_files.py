@@ -42,12 +42,12 @@ def test_first_line_stops_at_the_header_even_in_one_byte_chunks() -> None:
 
 
 def test_first_line_strips_a_byte_order_mark_and_carriage_return() -> None:
-    data = gzip.compress(("﻿" + HEADER + "\r\n" + ROW + "\r\n").encode("utf-8"))
+    data = gzip.compress(("﻿" + HEADER + "\r\n" + ROW + "\r\n").encode("utf-8"), mtime=0)
     assert first_line([data]) == HEADER
 
 
 def test_first_line_of_a_file_with_no_newline_is_the_whole_file() -> None:
-    assert first_line(_chunks(gzip.compress(HEADER.encode("utf-8")), 7)) == HEADER
+    assert first_line(_chunks(gzip.compress(HEADER.encode("utf-8"), mtime=0), 7)) == HEADER
 
 
 def test_first_line_rejects_bytes_that_are_not_gzip() -> None:
