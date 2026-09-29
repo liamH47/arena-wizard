@@ -78,6 +78,27 @@ class Castability:
 
 
 @dataclass(frozen=True, slots=True)
+class EventScoring:
+    """Values when the public Sealed file is absent or embargoed (decision 0007).
+
+    All in q-points. Grades: `center + slope * z` plus the bonuses, with error `sigma`.
+    Premier Draft: `proxy_slope` times its own q plus the bonuses, with structural error
+    `proxy_sigma` on top of sampling error. The bonuses are the measured amounts by which
+    sealed rewards removal and rares beyond their draft value.
+    """
+
+    center: float
+    slope: float
+    sigma: float
+    removal_bonus: float
+    rare_bonus: float
+    proxy_slope: float
+    proxy_sigma: float
+    min_grade_coverage: float
+    max_decks: int
+
+
+@dataclass(frozen=True, slots=True)
 class ScoringConfig:
     """A complete, validated scoring configuration and the hash of the file it came from."""
 
@@ -87,6 +108,7 @@ class ScoringConfig:
     shrinkage: Shrinkage
     bombs: BombRules
     castability: Castability
+    event: EventScoring
     sha256: str
 
 
@@ -120,7 +142,8 @@ def parse_scoring_config(raw: Any, sha256: str = "") -> ScoringConfig:
         The configuration.
 
     Raises:
-        ConfigError: A section or field is missing, unknown, or not a number.
+        ConfigError: A section or field is missing, unknown, or not a number, or an event
+            error term is not positive.
     """
     if not isinstance(raw, Mapping) or not isinstance(raw.get("version"), str):
         raise ConfigError("scoring config needs a string 'version'")
@@ -131,8 +154,20 @@ def parse_scoring_config(raw: Any, sha256: str = "") -> ScoringConfig:
         shrinkage=_section(Shrinkage, raw.get("shrinkage"), "shrinkage"),
         bombs=_section(BombRules, raw.get("bombs"), "bombs"),
         castability=_section(Castability, raw.get("castability"), "castability"),
+        event=_event(raw.get("event")),
         sha256=sha256,
     )
+
+
+def _event(raw: Any) -> EventScoring:
+    """The event section, whose error terms must be positive to weight anything."""
+    event = _section(EventScoring, raw, "event")
+    for name in ("sigma", "proxy_sigma"):
+        if getattr(event, name) <= 0:
+            raise ConfigError(f"scoring config 'event.{name}' must be above zero")
+    if not 0 < event.min_grade_coverage <= 1 or event.max_decks < 1:
+        raise ConfigError("scoring config 'event' coverage must be in (0, 1], max_decks >= 1")
+    return event
 
 
 def load_scoring_config(fmt: Format, set_code: str | None = None) -> ScoringConfig:

@@ -41,9 +41,11 @@ SOS_BEFORE_EMBARGO = dt.date(2026, 4, 25)
 # --- load-file ---------------------------------------------------------------------------
 
 
-def _bucket(body: bytes) -> Callable[[httpx.Request], httpx.Response]:
+def _bucket(
+    body: bytes, event_type: EventType = EventType.SEALED
+) -> Callable[[httpx.Request], httpx.Response]:
     def handle(request: httpx.Request) -> httpx.Response:
-        assert str(request.url) == public_file_url("SOS", EventType.SEALED)
+        assert str(request.url) == public_file_url("SOS", event_type)
         if request.method == "HEAD":
             return httpx.Response(200, headers={"ETag": '"v1"'})
         return httpx.Response(200, headers={"ETag": '"v1"'}, stream=ChunkedBody(body))
@@ -87,6 +89,15 @@ def test_statistics_are_none_until_a_file_is_loaded_then_cover_every_game(
     assert stats.source.content_sha256 == hashlib.sha256(file_bytes()).hexdigest()
 
 
+def test_premier_draft_statistics_come_from_their_own_file_and_label(tmp_path: Path) -> None:
+    ctx = make_context(_bucket(file_bytes(), EventType.PREMIER_DRAFT), FakeClock())
+    assert commands.statistics_for("SOS", tmp_path, EventType.PREMIER_DRAFT) is None
+    commands.load_game_file("SOS", EventType.PREMIER_DRAFT, ctx, tmp_path, lambda _: None)
+    stats = commands.statistics_for("SOS", tmp_path, EventType.PREMIER_DRAFT)
+    assert stats is not None and stats.source.label == commands.DRAFT_LABEL
+    assert commands.statistics_for("SOS", tmp_path) is None
+
+
 # --- build -------------------------------------------------------------------------------
 
 
@@ -117,9 +128,12 @@ def _stats() -> Snapshot:
     return snapshot_from_json(presplit_path(EVAL_DIR, "SOS").read_text(encoding="utf-8"))
 
 
-def _build(text: str, stats: Snapshot | None, today: dt.date = TODAY) -> tuple[int, list[str]]:
+def _build(
+    text: str, stats: Snapshot | None, today: dt.date = TODAY, stale: tuple[str, ...] = ()
+) -> tuple[int, list[str]]:
     lines: list[str] = []
-    status = commands.build("SOS", Format.BO1_SEALED, text, stats, today, lines.append)
+    data = commands.BuildData(public_sealed=stats, stale=stale)
+    status = commands.build("SOS", Format.BO1_SEALED, text, data, today, lines.append)
     return status, lines
 
 
@@ -137,26 +151,37 @@ def test_a_real_pool_with_statistics_prints_ranked_decks_with_breakdowns_and_lis
     assert "" in lines
 
 
-def test_without_statistics_the_build_refuses_and_names_the_load_command() -> None:
+def test_without_statistics_event_mode_refuses_and_names_every_way_to_add_values() -> None:
     status, lines = _build("\n".join(_export(_sample_pool())), None)
     assert status == 1
-    assert lines[-1].endswith("Load them with: arena-wizard load-file --set SOS")
-    assert not any(line.startswith("#") for line in lines)
+    assert lines[1] == "SOS data for this build (SOS reached Arena 2026-04-21):"
+    assert any(
+        "  Public file  missing  " in line and "load-file --set SOS" in line for line in lines
+    )
+    assert lines[-1].startswith("No card values for SOS, so no deck is ranked.")
+    assert not any(line.startswith("#") or line.startswith("Statistics:") for line in lines)
 
 
 def test_statistics_before_the_embargo_date_are_switched_off() -> None:
     status, lines = _build("\n".join(_export(_sample_pool())), _stats(), SOS_BEFORE_EMBARGO)
     assert status == 1
-    assert lines[0].startswith("SOS reached Arena on 2026-04-21.")
-    assert "until 2026-05-02" in lines[0]
-    assert "https://www.17lands.com/usage_guidelines" in lines[0]
-    assert lines[-1].startswith("No statistics for SOS")
+    assert any(line.startswith("  Public file  embargoed ") for line in lines)
+    assert any("asks tools not to show SOS data before 2026-05-02" in line for line in lines)
+    assert not any(line.startswith("Statistics:") for line in lines)
+    assert lines[-1].startswith("No card values for SOS")
+
+
+def test_stored_pastes_that_must_be_pasted_again_are_named() -> None:
+    status, lines = _build("\n".join(_export(_sample_pool())), _stats(), stale=("Old paste",))
+    assert status == 0
+    assert lines[1] == "Stored paste not used: Old paste."
 
 
 def test_statistics_on_the_embargo_date_are_used() -> None:
     status, lines = _build("\n".join(_export(_sample_pool())), _stats(), dt.date(2026, 5, 2))
     assert status == 0
-    assert not any("reached Arena" in line for line in lines)
+    assert lines[1].startswith("Statistics: 17Lands public Sealed game data")
+    assert not any("data for this build" in line for line in lines)
 
 
 def test_a_pool_too_small_for_any_deck_says_so() -> None:
@@ -411,6 +436,26 @@ def _copy(evaluated: Path, tmp_path: Path) -> tuple[Path, list[str]]:
     shutil.copytree(evaluated, tmp_path, dirs_exist_ok=True)
     first = (tmp_path / "first-run.txt").read_text(encoding="utf-8").splitlines()
     return tmp_path / "backend" / "eval", first
+
+
+def test_pasted_data_never_reaches_the_evaluation(
+    evaluated: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decision 0005: the published report must not change with a full private store."""
+    from tests.unit.test_paste_commands import card_data_csv, grades_csv, request, run_paste
+
+    data_dir = tmp_path / "private"
+    grades = request(set_code="SOS")
+    cards = request("card-data", "17lands-card-data", EventType.ARENA_DIRECT_SEALED, set_code="SOS")
+    assert run_paste(grades, grades_csv("SOS"), data_dir, dt.date(2026, 5, 1))[0] == 0
+    assert run_paste(cards, card_data_csv("SOS"), data_dir, dt.date(2026, 5, 1))[0] == 0
+    monkeypatch.setenv("ARENA_WIZARD_DATA_DIR", str(data_dir))
+    eval_dir, first = _copy(evaluated, tmp_path / "copy")
+    written = _tree(eval_dir)
+    lines: list[str] = []
+    commands.run_eval(eval_dir, True, None, lines.append)
+    assert lines == first
+    assert _tree(eval_dir) == written
 
 
 def test_running_the_eval_writes_the_report_and_check_mode_confirms_it(

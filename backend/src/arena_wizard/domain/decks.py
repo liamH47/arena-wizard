@@ -3,17 +3,40 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from arena_wizard.domain.cards import Color
 from arena_wizard.domain.pool import PoolEntry
+
+
+class ValueBasis(StrEnum):
+    """What a card's value rests on. Explanations branch on this, never on whether some
+    snapshot happens to exist (decision 0007)."""
+
+    WIN_RATES = "win rates"
+    DRAFT_PROXY = "draft proxy"
+    GRADES = "grades"
+    RARITY_GRADE = "rarity average of grades"
+    RARITY = "rarity average"
+    NONE = "no data"
+
+
+@dataclass(frozen=True, slots=True)
+class LayerShare:
+    """How much of a value one source carries, as a share of the final weight."""
+
+    name: str
+    share: float
 
 
 @dataclass(frozen=True, slots=True)
 class CardValue:
     """What one card is worth to the engine, and how sure it is.
 
-    `q` is in win-rate points above the format mean. `observed` is the raw game-in-hand
-    win rate, `used` the shrunk one, and `prior_share` how much of `used` is the prior.
+    `q` is in points of game-in-hand win rate above the format mean. `observed` is the raw
+    game-in-hand win rate, `used` the shrunk one, and `prior_share` how much of the value
+    is the prior. `layers` says how much each source carries and `grades` lists each
+    reviewer's own grade, when the value came from the event-mode chain.
     """
 
     name: str
@@ -24,6 +47,9 @@ class CardValue:
     games: int
     source: str
     se: float
+    basis: ValueBasis = ValueBasis.WIN_RATES
+    layers: tuple[LayerShare, ...] = ()
+    grades: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

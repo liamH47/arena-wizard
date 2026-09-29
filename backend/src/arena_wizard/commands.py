@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from arena_wizard.catalog import (
+    CardTable,
     load_packaged_card_table,
     unresolved_names,
     write_card_table,
@@ -38,7 +39,14 @@ from arena_wizard.etl.games import count_daily, read_games, snapshot
 from arena_wizard.etl.sync_cards import compute_card_table, fetch_card_sources
 from arena_wizard.eval.build_set import choose_split_day, collect_pools, select_sample
 from arena_wizard.eval.gate import gate
-from arena_wizard.eval.report import build_report, evaluate_set, render_markdown, report_to_json
+from arena_wizard.eval.report import (
+    build_report,
+    evaluate_set,
+    leave_one_out,
+    rarity_baseline,
+    render_markdown,
+    report_to_json,
+)
 from arena_wizard.eval.storage import (
     json_text,
     presplit_path,
@@ -52,11 +60,14 @@ from arena_wizard.eval.storage import (
     switch_path,
     write_text,
 )
+from arena_wizard.event_mode import build_event, choose_sources
+from arena_wizard.pastes.store import StoredPaste
 from arena_wizard.sources.http import SourceContext
 from arena_wizard.sources.seventeenlands_files import public_file_url
 
 Echo = Callable[[str], None]
 SEALED_LABEL = "17Lands public Sealed game data"
+DRAFT_LABEL = "17Lands public Premier Draft game data"
 
 
 def sync_cards(
@@ -105,12 +116,15 @@ def load_game_file(
     return 0
 
 
-def statistics_for(code: str, cache: Path | None) -> Snapshot | None:
-    """The full-file Sealed snapshot for a set, or None when it has not been loaded."""
-    cached = read_cached(code, EventType.SEALED, cache)
+def statistics_for(
+    code: str, cache: Path | None, event_type: EventType = EventType.SEALED
+) -> Snapshot | None:
+    """The full-file snapshot for a set and event type, or None when it is not cached."""
+    cached = read_cached(code, event_type, cache)
     if cached is None:
         return None
-    return snapshot(cached.daily, code, SEALED_LABEL, cached.sha256)
+    label = SEALED_LABEL if event_type is EventType.SEALED else DRAFT_LABEL
+    return snapshot(cached.daily, code, label, cached.sha256)
 
 
 def _deck_text(rank: int, deck: ScoredDeck) -> list[str]:
@@ -151,27 +165,38 @@ def _warning_lines(pool: Pool) -> list[str]:
     return lines
 
 
+@dataclass(frozen=True, slots=True)
+class BuildData:
+    """Everything a build can value cards from, gathered by the caller.
+
+    `public_sealed` and `public_draft` are the cached 17Lands public files; `pastes` are
+    the set's private pastes (decision 0005), and `stale` names any that must be pasted
+    again. `covered` lists event types whose public file replaces pastes.
+    """
+
+    public_sealed: Snapshot | None = None
+    public_draft: Snapshot | None = None
+    pastes: tuple[StoredPaste, ...] = ()
+    stale: tuple[str, ...] = ()
+    covered: frozenset[EventType] = frozenset()
+
+
 def build(
     code: str,
     fmt: Format,
     export_text: str,
-    stats: Snapshot | None,
+    data: BuildData,
     today: dt.date,
     echo: Echo,
 ) -> int:
     """Parse a pasted pool, build the best decks, and print them with their reasons.
 
-    Refuses to rank decks without statistics, and treats statistics for a set still under
-    the 17Lands embargo as absent.
+    With the public Sealed file past its embargo, values come from it (milestone 1).
+    Otherwise event mode values cards from grades and pasted or public draft and Arena
+    Direct win rates (decision 0007), and refuses only when there are none of those.
     """
     config = load_set_config(code)
-    if stats is not None and today < config.embargo_until:
-        echo(
-            f"{code} reached Arena on {config.arena_release_date}. 17Lands asks tools not to show "
-            f"a new set's data until {config.embargo_until}, so its statistics are off until "
-            "then: https://www.17lands.com/usage_guidelines"
-        )
-        stats = None
+    embargoed = today < config.embargo_until
     home = load_packaged_card_table(code)
     others = [load_packaged_card_table(c) for c in packaged_set_codes() if c != config.code]
     pool: Pool = resolve_pool(
@@ -185,19 +210,35 @@ def build(
     echo(f"{code} pool: {pool.nonbasic_count} non-basic cards ({code} pools run {low} to {high}).")
     for line in _warning_lines(pool):
         echo(line)
-    if stats is None:
-        echo(
-            f"No statistics for {code}, so no deck can be ranked: without them every card is "
-            f"worth the same. Load them with: arena-wizard load-file --set {code}"
+    for problem in data.stale:
+        echo(f"Stored paste not used: {problem}.")
+    scoring = load_scoring_config(fmt, config.code)
+    curated = load_curated(config.code)
+    rarity_of = spell_rarities(home.cards)
+    stats = data.public_sealed
+    if stats is None or embargoed:
+        sources = choose_sources(
+            data.pastes,
+            None if embargoed else data.public_draft,
+            DRAFT_LABEL,
+            data.covered,
         )
-        return 1
+        return build_event(
+            config,
+            pool,
+            rarity_of,
+            sources,
+            scoring,
+            curated,
+            today,
+            stats is not None and embargoed,
+            echo,
+        )
     echo(
         f"Statistics: {stats.source.label}, {stats.source.first_day} to {stats.source.last_day} "
         f"({stats.source.games:,} games)."
     )
-    scoring = load_scoring_config(fmt, config.code)
-    curated = load_curated(config.code)
-    inputs = prepare_inputs(pool, stats, spell_rarities(home.cards), scoring, curated)
+    inputs = prepare_inputs(pool, stats, rarity_of, scoring, curated)
     decks = describe(
         build_decks(pool, inputs).decks,
         inputs.pairs,
@@ -361,7 +402,8 @@ def run_eval(
         return 1
     scoring = load_scoring_config(Format.BO1_SEALED)
     package = Path(__file__).resolve().parent
-    sections = {}
+    loaded: dict[str, tuple[dict[str, Any], dict[str, str], CardTable, dict[str, Any], Snapshot]]
+    loaded = {}
     for code, pin in sorted(pins.items()):
         paths = {
             "sample_sha256": sample_path(eval_dir, code),
@@ -379,16 +421,26 @@ def run_eval(
             "card_table_sha256": _file_sha256(package / "data" / "cards" / f"{code}.json"),
             "curated_bombs_sha256": _file_sha256(package / "config" / "bombs" / f"{code}.yaml"),
         }
+        snap = snapshot_from_json(texts["presplit_sha256"])
+        loaded[code] = (pin, texts, table, provenance, snap)
+    # The data-free baseline values each set's cards at the other set's rarity averages
+    # (decision 0007), so every set is loaded before any is evaluated.
+    baselines = leave_one_out(
+        {code: rarity_baseline(item[4], item[2], scoring) for code, item in loaded.items()}
+    )
+    sections = {}
+    for code, (pin, texts, table, provenance, snap) in loaded.items():
         sections[code] = evaluate_set(
             code,
             samples_from_text(texts["sample_sha256"]),
             samples_from_text(texts["switch_sha256"]),
-            snapshot_from_json(texts["presplit_sha256"]),
+            snap,
             table,
             build_index([table], code),
             scoring,
             load_curated(code),
             provenance,
+            baselines[code],
         )
         echo(f"{code}: evaluated {pin['sample_size']} pools and {pin['switch_size']} switch pools")
     report = build_report(sections, scoring)

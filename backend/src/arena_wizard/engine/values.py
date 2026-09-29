@@ -27,12 +27,16 @@ def shrink(wins: int, games: int, prior: float, prior_games: float) -> float:
 
 @dataclass(frozen=True, slots=True)
 class FormatMeans:
-    """Games-weighted means that shrinkage pulls toward and values are measured from."""
+    """Games-weighted means that shrinkage pulls toward and values are measured from.
+
+    `iwd` is None, and `gns_by_rarity` empty, when the source has no not-seen games at all
+    (a pasted export without the Not Seen columns); values then use win rate in hand only.
+    """
 
     gih: float
     gih_by_rarity: Mapping[Rarity, float]
     gns_by_rarity: Mapping[Rarity, float]
-    iwd: float
+    iwd: float | None
     pair: float | None
 
 
@@ -58,7 +62,7 @@ def format_means(snapshot: Snapshot, rarity_of: Mapping[str, Rarity]) -> FormatM
     known = {name: c for name, c in snapshot.cards.items() if name in rarity_of}
     gih = _weighted_mean((c.wins_gih, c.games_gih) for c in known.values())
     gns = _weighted_mean((c.wins_gns, c.games_gns) for c in known.values())
-    if gih is None or gns is None:
+    if gih is None:
         return None
     by_rarity: dict[Rarity, float] = {}
     gns_by_rarity: dict[Rarity, float] = {}
@@ -68,11 +72,39 @@ def format_means(snapshot: Snapshot, rarity_of: Mapping[str, Rarity]) -> FormatM
         rarity_gns = _weighted_mean((c.wins_gns, c.games_gns) for c in members)
         # A rarity with no games falls back to the format; one that won nothing keeps 0.0.
         by_rarity[rarity] = gih if rarity_gih is None else rarity_gih
-        gns_by_rarity[rarity] = gns if rarity_gns is None else rarity_gns
+        if gns is not None:
+            gns_by_rarity[rarity] = gns if rarity_gns is None else rarity_gns
     pair = _weighted_mean((p.wins, p.games) for p in snapshot.pairs.values())
     return FormatMeans(
-        gih=gih, gih_by_rarity=by_rarity, gns_by_rarity=gns_by_rarity, iwd=gih - gns, pair=pair
+        gih=gih,
+        gih_by_rarity=by_rarity,
+        gns_by_rarity=gns_by_rarity,
+        iwd=None if gns is None else gih - gns,
+        pair=pair,
     )
+
+
+def iwd_points(
+    counts: CardCounts,
+    rarity: Rarity,
+    used: float,
+    means: FormatMeans,
+    config: ScoringConfig,
+) -> float:
+    """Improvement when drawn above its rarity's, in points, before the IWD weight. Pure.
+
+    The not-seen rate shrinks toward the rarity's, so a card with in-hand games but none
+    unseen gets the Bayesian estimate from its in-hand rate alone. Zero when the source has
+    no not-seen games at all, so a missing column never becomes a made-up term.
+    """
+    if means.iwd is None:
+        return 0.0
+    prior = means.gih_by_rarity.get(rarity, means.gih)
+    gns_prior = means.gns_by_rarity.get(rarity, used - means.iwd)
+    gns_used = shrink(
+        counts.wins_gns, counts.games_gns, gns_prior, config.shrinkage.iwd_prior_games
+    )
+    return 100 * ((used - gns_used) - (prior - gns_prior))
 
 
 def card_value(
@@ -108,12 +140,9 @@ def card_value(
             name, 100 * (prior - means.gih), None, prior, 1.0, 0, f"{rarity.value} average", se
         )
     used = shrink(counts.wins_gih, counts.games_gih, prior, k)
-    gns_prior = means.gns_by_rarity.get(rarity, used - means.iwd)
-    gns_used = shrink(
-        counts.wins_gns, counts.games_gns, gns_prior, config.shrinkage.iwd_prior_games
+    q = 100 * (used - means.gih) + config.weights.iwd * iwd_points(
+        counts, rarity, used, means, config
     )
-    rarity_iwd = prior - gns_prior
-    q = 100 * (used - means.gih) + config.weights.iwd * 100 * ((used - gns_used) - rarity_iwd)
     se = 100 * math.sqrt(used * (1 - used) / (counts.games_gih + k))
     return CardValue(
         name=name,

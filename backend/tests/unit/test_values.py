@@ -14,6 +14,7 @@ from arena_wizard.engine.values import (
     card_value,
     estimate_prior_games,
     format_means,
+    iwd_points,
     pair_value,
     shrink,
     spell_rarities,
@@ -94,9 +95,34 @@ def test_format_means_are_none_without_in_hand_games() -> None:
     assert format_means(_snapshot({}), {}) is None
 
 
-def test_format_means_are_none_without_not_seen_games() -> None:
-    snapshot = _snapshot({"Common": CardCounts(games_gih=10, wins_gih=5)})
-    assert format_means(snapshot, {"Common": C}) is None
+def test_without_not_seen_games_values_use_win_rate_in_hand_only() -> None:
+    snapshot = _snapshot(
+        {
+            "Common": CardCounts(games_gih=100, wins_gih=60),
+            "Other": CardCounts(games_gih=100, wins_gih=40),
+        }
+    )
+    means = format_means(snapshot, {"Common": C, "Other": C})
+    assert means is not None and means.iwd is None and means.gns_by_rarity == {}
+    config = _config()
+    value = card_value("Common", C, snapshot.cards["Common"], means, config, "paste")
+    used = (60 + 0.5 * 100) / 200
+    assert value.q == pytest.approx(100 * (used - 0.5))
+    other = card_value("Other", C, snapshot.cards["Other"], means, config, "paste")
+    assert value.q > other.q
+
+
+def test_adding_not_seen_games_changes_a_value_only_by_its_improvement_term() -> None:
+    without = CardCounts(games_gih=100, wins_gih=60)
+    with_gns = CardCounts(games_gih=100, wins_gih=60, games_gns=100, wins_gns=40)
+    rest = CardCounts(games_gih=100, wins_gih=40, games_gns=100, wins_gns=45)
+    config = _config()
+    a = format_means(_snapshot({"Common": without, "Other": rest}), {"Common": C, "Other": C})
+    b = format_means(_snapshot({"Common": with_gns, "Other": rest}), {"Common": C, "Other": C})
+    assert a is not None and b is not None and a.gih == b.gih
+    base = card_value("Common", C, without, a, config, "x")
+    full = card_value("Common", C, with_gns, b, config, "x")
+    assert base.used == full.used and full.q != base.q
 
 
 def test_without_any_data_a_card_is_worth_zero_and_says_so() -> None:
@@ -202,3 +228,10 @@ def test_spell_rarities_leave_out_lands() -> None:
         card("Plains", type_line="Basic Land — Plains", produced=("W",)),
     ]
     assert spell_rarities(cards) == {"Spell": MYTHIC}
+
+
+def test_improvement_when_drawn_is_zero_when_the_source_has_no_not_seen_games() -> None:
+    no_gns = FormatMeans(gih=0.5, gih_by_rarity={C: 0.5}, gns_by_rarity={}, iwd=None, pair=None)
+    counts = CardCounts(games_gih=100, wins_gih=60, games_gns=100, wins_gns=40)
+    assert iwd_points(counts, C, 0.58, no_gns, _config()) == 0.0
+    assert iwd_points(counts, C, 0.58, MEANS, _config()) != 0.0

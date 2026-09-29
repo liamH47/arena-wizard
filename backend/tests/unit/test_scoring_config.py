@@ -53,3 +53,34 @@ def test_each_problem_names_its_section_and_field(mutate: Any, message: str) -> 
 def test_a_document_that_is_not_a_mapping_is_rejected() -> None:
     with pytest.raises(ConfigError, match="version"):
         parse_scoring_config(["not", "a", "mapping"])
+
+
+def test_the_event_section_loads_with_its_types() -> None:
+    event = load_scoring_config(Format.BO1_SEALED).event
+    assert event.sigma > 0 and event.proxy_sigma > 0
+    assert isinstance(event.max_decks, int) and event.max_decks >= 1
+    assert 0 < event.min_grade_coverage <= 1
+
+
+@pytest.mark.parametrize(
+    ("field", "bad", "message"),
+    [
+        ("sigma", 0, "event.sigma"),
+        ("proxy_sigma", -1.0, "event.proxy_sigma"),
+        ("min_grade_coverage", 0, "coverage"),
+        ("min_grade_coverage", 1.5, "coverage"),
+        ("max_decks", 0, "max_decks"),
+    ],
+)
+def test_event_error_terms_and_limits_must_be_usable(field: str, bad: float, message: str) -> None:
+    raw = copy.deepcopy(_raw())
+    raw["event"][field] = bad
+    with pytest.raises(ConfigError, match=message):
+        parse_scoring_config(raw)
+
+
+def test_a_missing_event_section_is_an_error() -> None:
+    raw = copy.deepcopy(_raw())
+    raw.pop("event")
+    with pytest.raises(ConfigError, match="section 'event'"):
+        parse_scoring_config(raw)

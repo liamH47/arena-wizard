@@ -12,6 +12,7 @@ the group from set reviews, before the automatic list is shown.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib import resources
@@ -25,6 +26,8 @@ from arena_wizard.domain.scoring import BombRules
 from arena_wizard.domain.sets import ConfigError
 from arena_wizard.domain.stats import CardCounts
 from arena_wizard.engine.values import FormatMeans, shrink
+
+PROVENANCE = re.compile(r"own|permission \d{4}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +60,7 @@ def bomb_scores(
     Args:
         counts: Card counts by name.
         rarity_of: Rarity by name, for the shrinkage target.
-        means: The format means; no scores without them.
+        means: The format means; no scores without them or without not-seen games.
         rules: The game floor and the minimum number of qualifying cards.
         prior_games: Pseudo-games for the game-in-hand rate.
         iwd_prior_games: Pseudo-games for the not-seen rate.
@@ -66,7 +69,7 @@ def bomb_scores(
         Bomb score by name for cards with at least `rules.min_games` games in hand; empty
         when fewer than `rules.min_cards` cards qualify.
     """
-    if means is None:
+    if means is None or means.iwd is None:
         return {}
     gih: dict[str, float] = {}
     iwd: dict[str, float] = {}
@@ -91,9 +94,21 @@ def bomb_scores(
 def parse_curated(raw: Any) -> tuple[CuratedBomb, ...]:
     """Validate a curated bomb file.
 
+    The file must say whose judgment it is (decision 0007): `provenance: own` for the
+    group's own list, or `provenance: permission NNNN` naming the decision that records a
+    third party's permission. Third-party lists are never committed otherwise. Code can
+    check that the label is present, not that it is true.
+
     Raises:
-        ConfigError: An entry lacks a name, a valid action, or a cited source.
+        ConfigError: No valid provenance, or an entry lacks a name, a valid action, or a
+            source (who decided).
     """
+    provenance = raw.get("provenance") if isinstance(raw, Mapping) else None
+    if not isinstance(provenance, str) or not PROVENANCE.fullmatch(provenance):
+        raise ConfigError(
+            "curated bomb file needs 'provenance: own' (the group's own list) or "
+            "'provenance: permission NNNN' (a decision recording permission)"
+        )
     entries = raw.get("curated") if isinstance(raw, Mapping) else None
     if not isinstance(entries, list):
         raise ConfigError("curated bomb file needs a 'curated' list")
