@@ -1,0 +1,21 @@
+# Secrets of Strixhaven. Arena release measured as the first game in the 17Lands Sealed
+# file (2026-04-21 15:41 UTC); paper release from Scryfall.
+code: SOS
+name: Secrets of Strixhaven
+arena_release_date: 2026-04-21
+paper_release_date: 2026-04-24
+formats: [bo1_sealed]
+# Set codes an Arena export line from this set's packs can carry.
+card_set_codes: [SOS, SOA, SPG]
+# Scryfall queries (each gets " game:arena" appended) whose Arena prints form the card
+# table. Special Guests prints carry the release date of the set they ship with, so the
+# dated query selects exactly the ten SOS guests (SPG 149 to 158a).
+scryfall_queries:
+  - "set:sos"
+  - "set:soa"
+  - "set:spg date=2026-04-24"
+seventeenlands_expansion: SOS
+# Measured on 7,538 pools: 81 to 85 non-basic cards, mode 83.
+nonbasic_pool_range: [81, 85]
+stats_sources:
+  bo1_sealed: [Sealed, ArenaDirect_Sealed, PremierDraft]

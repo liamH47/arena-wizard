@@ -1,0 +1,16 @@
+# The Hobbit. Arena release measured as the first game in the 17Lands Sealed file
+# (2026-08-11 15:56 UTC); paper release from Scryfall. The Hobbit Eternal (HOC) cards are
+# on Arena but not in HOB packs: the 17Lands header has exactly the 193 HOB names.
+code: HOB
+name: The Hobbit
+arena_release_date: 2026-08-11
+paper_release_date: 2026-08-14
+formats: [bo1_sealed]
+card_set_codes: [HOB]
+scryfall_queries:
+  - "set:hob"
+seventeenlands_expansion: HOB
+# Measured on 9,685 pools: mostly 79 to 84, mode 81; 146 real pools (1.5%) had 78.
+nonbasic_pool_range: [78, 84]
+stats_sources:
+  bo1_sealed: [Sealed, ArenaDirect_Sealed, PremierDraft]
