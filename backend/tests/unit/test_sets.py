@@ -100,3 +100,32 @@ def test_every_packaged_set_loads() -> None:
 def test_an_unknown_set_is_a_config_error() -> None:
     with pytest.raises(ConfigError, match="no set configuration for 'XYZ'"):
         load_set_config("XYZ")
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, ()),
+        ([], ()),
+        (["Sealed", "PremierDraft"], (EventType.SEALED, EventType.PREMIER_DRAFT)),
+    ],
+)
+def test_published_public_files_are_optional(raw: Any, expected: tuple[EventType, ...]) -> None:
+    values = _valid() if raw is None else _valid() | {"public_files": raw}
+    assert parse_set_config(values).public_files == expected
+
+
+def test_an_unknown_public_file_event_type_is_refused() -> None:
+    with pytest.raises(ConfigError, match="public_files has an unknown event type"):
+        parse_set_config(_valid() | {"public_files": ["Cube"]})
+
+
+def test_a_public_files_value_that_is_not_a_list_of_strings_is_refused() -> None:
+    with pytest.raises(ConfigError, match="public_files"):
+        parse_set_config(_valid() | {"public_files": "Sealed"})
+
+
+def test_sos_and_hob_record_their_published_files_and_fra_none() -> None:
+    assert load_set_config("SOS").public_files == (EventType.SEALED, EventType.PREMIER_DRAFT)
+    assert load_set_config("HOB").public_files == (EventType.SEALED, EventType.PREMIER_DRAFT)
+    assert load_set_config("FRA").public_files == ()

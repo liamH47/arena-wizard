@@ -5,9 +5,13 @@ description = "Sealed-deck recommendations for MTG Arena Best-of-One sealed"
 requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
+    "alembic>=1.13",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
+    "psycopg[binary]>=3.2",
+    "pydantic-settings>=2.4",
     "pyyaml>=6.0.3",
+    "sqlalchemy>=2.0",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -46,6 +50,7 @@ python_version = "3.13"
 # No coverage gate here: a --cov-fail-under in addopts fires on every single-file run.
 # The gate lives in CI and the verify skill, read from coverage_floor.txt.
 testpaths = ["tests"]
+markers = ["postgres: needs a real Postgres at AW_TEST_PG_URL (CI sets AW_TEST_PG_REQUIRED=1)"]
 
 [tool.coverage.run]
 branch = true

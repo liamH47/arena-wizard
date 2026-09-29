@@ -15,6 +15,7 @@ from arena_wizard.devtools.floor_guard import (
     check,
     collect_rules,
     count_pragmas,
+    database_file_failures,
     evaluate,
     parse_floor,
     private_data_failures,
@@ -257,3 +258,22 @@ def test_a_failing_grep_for_private_data_fails_closed(tmp_path: Path) -> None:
 def test_this_repository_carries_no_private_data() -> None:
     root = Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel").stdout.strip())
     assert private_data_failures(root) == ()
+
+
+def test_a_database_file_git_would_commit_fails(repo: Path) -> None:
+    _write(repo, "backend/web.db", "rows")
+    assert check(repo, "base") == ("database files would be committed: backend/web.db",)
+
+
+def test_an_ignored_database_file_is_fine(repo: Path) -> None:
+    _write(repo, ".gitignore", "*.sqlite3\n")
+    _write(repo, "local.sqlite3", "rows")
+    assert database_file_failures(repo) == ()
+
+
+def test_a_git_failure_listing_database_files_fails_closed(tmp_path: Path) -> None:
+    def broken(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(["git", *args], 128, "", "not a repository")
+
+    with pytest.raises(GuardError, match="ls-files failed"):
+        database_file_failures(tmp_path, broken)

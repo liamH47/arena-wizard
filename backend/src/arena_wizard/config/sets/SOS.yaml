@@ -19,3 +19,6 @@ seventeenlands_expansion: SOS
 nonbasic_pool_range: [81, 85]
 stats_sources:
   bo1_sealed: [Sealed, ArenaDirect_Sealed, PremierDraft]
+# 17Lands public files published for this set (checked 2026-09-28). Pastes of the same
+# data are refused and ignored (decision 0005, rule 4; decision 0008).
+public_files: [Sealed, PremierDraft]

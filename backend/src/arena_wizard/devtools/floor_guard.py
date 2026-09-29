@@ -245,6 +245,25 @@ def private_data_failures(root: Path, git: Git = run_git) -> tuple[str, ...]:
     return (f"private pasted data is in the repository: {', '.join(files)}",)
 
 
+DATABASE_PATTERNS = ("*.db", "*.sqlite", "*.sqlite3")
+
+
+def database_file_failures(root: Path, git: Git = run_git) -> tuple[str, ...]:
+    """Find database files git would commit. The web app's database holds pasted data,
+    and its rows carry no marker, so any committed database file is refused (decision 0008).
+
+    Raises:
+        GuardError: git ls-files failed.
+    """
+    listed = git(
+        root, "ls-files", "--cached", "--others", "--exclude-standard", "--", *DATABASE_PATTERNS
+    )
+    if listed.returncode != 0:
+        raise GuardError(f"git ls-files failed ({listed.returncode}): {listed.stderr.strip()}")
+    files = sorted(line.strip() for line in listed.stdout.splitlines() if line.strip())
+    return (f"database files would be committed: {', '.join(files)}",) if files else ()
+
+
 def check(root: Path, base_ref: str, git: Git = run_git) -> tuple[str, ...]:
     """Run every check of the working tree against a base ref.
 
@@ -264,6 +283,7 @@ def check(root: Path, base_ref: str, git: Git = run_git) -> tuple[str, ...]:
     return (
         structural_failures(root)
         + private_data_failures(root, git)
+        + database_file_failures(root, git)
         + evaluate(collect_rules(root, base_ref, git), head)
     )
 
