@@ -9,8 +9,8 @@ decisions so they are not re-litigated.
 |---|---|---|
 | 0 | Bootstrap: tooling, CI, verify skill, agents, decision log, card tables | done |
 | 1 | CLI slice with the evaluation harness | done |
-| 2 | FRA event mode (pasted grades and card data, Bayesian chain, curated bombs) | in review |
-| 3 | Web app and deploy | planned |
+| 2 | FRA event mode (pasted grades and card data, Bayesian chain, curated bombs) | done |
+| 3 | Web app and deploy: 3a backend (in review), 3b frontend and deploy | in progress |
 | 4 | Refresh, keep-warm, observability | planned |
 | 5 | Trends and bombs pages | planned |
 | 6 | Screenshot importer | planned |
@@ -78,6 +78,12 @@ Recorded so they are not re-litigated:
 - **Without the public Sealed file, values stack: grades, then Premier Draft as a proxy,
   then Arena Direct.** A thin sample tightens a value, never replaces it — decision 0007;
   `tests/unit/test_event_values.py`.
+- **The web app fails closed:** on Render it will not boot without `ARENA_WIZARD_ENV=prod`,
+  Google auth, a Postgres URL, and `OWNER_EMAIL` — decision 0008; `tests/unit/test_config.py`.
+- **A web build's key covers the pool, every paste as stored, every file in the package,
+  and the embargo; "latest" means current** — decision 0008; `tests/api/test_pools.py`.
+- **Only whoever pasted, or the owner, deletes a paste; deletions are logged without data**
+  — decision 0008.
 - **A paste's key is (set, dataset, event type, registered source, UTC import day)**, and
   private data may not live inside a git work tree — decision 0007;
   `tests/unit/test_paste_store.py` and `tests/unit/test_datadir.py`.

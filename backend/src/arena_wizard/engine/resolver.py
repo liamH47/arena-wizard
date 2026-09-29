@@ -107,6 +107,11 @@ def resolve_card(
     )
 
 
+def _printing_order(card: Card, home: str) -> tuple[bool, str, tuple[int, str]]:
+    """Which printing represents merged copies: the home set first, then the lowest number."""
+    return (card.set_code != home, card.set_code, collector_sort_key(card.collector_number))
+
+
 def resolve_pool(
     items: Iterable[ParsedLine | ParseWarning],
     config: SetConfig,
@@ -138,7 +143,13 @@ def resolve_pool(
         if warning is not None:
             warnings.append(warning)
         if card is not None:
-            cards.setdefault(card.oracle_id, card)
+            # Copies under different printings merge under one printing chosen by the
+            # card, never by line order: the home set's, then the lowest collector number.
+            kept = cards.get(card.oracle_id)
+            if kept is None or _printing_order(card, config.code) < _printing_order(
+                kept, config.code
+            ):
+                cards[card.oracle_id] = card
             counts[card.oracle_id] = counts.get(card.oracle_id, 0) + item.count
     entries = sorted(
         (PoolEntry(cards[key], counts[key]) for key in cards),

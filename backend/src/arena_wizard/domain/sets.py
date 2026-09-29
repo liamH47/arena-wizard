@@ -56,6 +56,9 @@ class SetConfig:
     seventeenlands_expansion: str
     nonbasic_pool_range: tuple[int, int]
     stats_sources: Mapping[Format, tuple[EventType, ...]]
+    public_files: tuple[EventType, ...] = ()
+    """17Lands public files published for the set. Past the embargo, pastes of the same
+    data are refused and ignored (decision 0005, rule 4), even where no copy is cached."""
 
     @property
     def embargo_until(self) -> dt.date:
@@ -133,7 +136,20 @@ def parse_set_config(raw: Mapping[str, Any]) -> SetConfig:
         seventeenlands_expansion=str(_require(raw, "seventeenlands_expansion")),
         nonbasic_pool_range=(pool_range[0], pool_range[1]),
         stats_sources=stats_sources,
+        public_files=_public_files(raw.get("public_files", [])),
     )
+
+
+def _public_files(raw: Any) -> tuple[EventType, ...]:
+    """The optional list of published 17Lands files, as event types; absent means none."""
+    if raw in (None, []):
+        return ()
+    try:
+        return tuple(EventType(e) for e in _as_str_tuple(raw, "public_files"))
+    except ValueError as exc:
+        if isinstance(exc, ConfigError):
+            raise
+        raise ConfigError(f"set config public_files has an unknown event type: {exc}") from exc
 
 
 def packaged_set_codes() -> tuple[str, ...]:
