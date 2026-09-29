@@ -1,0 +1,32 @@
+{
+ "HOB": {
+  "bytes": 4183459,
+  "eligible_game_share": 0.3548269977852812,
+  "eligible_pool_share": 0.3470314919979349,
+  "games": 55086,
+  "pools": 9685,
+  "presplit_sha256": "8faf36a8def13810635f4ec11375a07b79dde8c6b9f862e5ae23fe71eaf5d6f8",
+  "sample_sha256": "dd562f2954ebfd463d47ed5bdd533956b7cca8981c73637b28bb96298f8fb8ec",
+  "sample_size": 600,
+  "sha256": "3196c93e8ac13454d2e083402afb5314f783dcb085785005f0a64d471b3a9b0d",
+  "split_day": "2026-08-14",
+  "switch_sha256": "89875dd28ecebf8b30d3dd99af0eb5f458d356e1e24d537ca63dc0e436865769",
+  "switch_size": 194,
+  "url": "https://17lands-public.s3.amazonaws.com/analysis_data/game_data/game_data_public.HOB.Sealed.csv.gz"
+ },
+ "SOS": {
+  "bytes": 3998658,
+  "eligible_game_share": 0.3145767988114049,
+  "eligible_pool_share": 0.3141416821438047,
+  "games": 42403,
+  "pools": 7538,
+  "presplit_sha256": "ae02915e6b906d97746be13217e681ad6d9690aa48a88c3038cc5fa4738030e6",
+  "sample_sha256": "b254f95df46e3a80260fe0c435853be492f3bb258e337a0a9f41b149a2573e76",
+  "sample_size": 600,
+  "sha256": "8556b2cebfa23a56e0d64bc7dcddd3bd3208ba6cf07a1f6b6f03b7c9c68fc96f",
+  "split_day": "2026-04-26",
+  "switch_sha256": "b6f5d33dd0d9d91cf9555dc2a9618a4a2ffc56f9cfd855ea75e9f3daa4172dd1",
+  "switch_size": 10,
+  "url": "https://17lands-public.s3.amazonaws.com/analysis_data/game_data/game_data_public.SOS.Sealed.csv.gz"
+ }
+}

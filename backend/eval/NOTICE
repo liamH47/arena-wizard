@@ -1,0 +1,9 @@
+The files in this directory other than accepted.json are derived from 17Lands public game
+data (https://www.17lands.com/public_datasets), licensed under Creative Commons
+Attribution 4.0 International (https://creativecommons.org/licenses/by/4.0/).
+
+Changes made by Arena Wizard: pools, decks, and results were regrouped per draft from the
+game-level rows; a stratified sample of pools was selected; card and color-pair counts
+were summed over the days before each file's split day. The evaluation report summarizes
+how Arena Wizard's deck builder compares with those decks. 17Lands does not endorse this
+project or its findings.
