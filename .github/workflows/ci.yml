@@ -88,6 +88,36 @@ jobs:
           FLOOR_GUARD_BASE: origin/${{ github.base_ref || 'main' }}
         run: uv run python -m arena_wizard.devtools.floor_guard
 
+  eval:
+    name: Evaluation gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The gate compares with the target branch's committed report, never with a file
+          # this pull request can rewrite, so it needs that branch's history.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        run: uv python install && uv sync --frozen
+
+      # Offline: the pinned samples and pre-split aggregates are committed, so CI never
+      # downloads from 17Lands. Fails when report.json or report.md is stale, or when the
+      # gate in decision 0006 fails against the base report. No paths filter: a config edit
+      # is exactly what must be measured.
+      - name: Regenerate the report and apply the gate
+        run: uv run arena-wizard eval run --check --base origin/${{ github.base_ref || 'main' }}
+
   frontend:
     name: Frontend (tsc, oxlint, build)
     runs-on: ubuntu-latest

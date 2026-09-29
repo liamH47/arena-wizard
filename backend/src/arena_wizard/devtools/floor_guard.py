@@ -3,8 +3,8 @@
 Fails a pull request that lowers `coverage_floor.txt`, adds coverage-exclusion pragmas,
 widens what coverage skips (exclusions, partial branches, omitted files), changes what it
 measures, moves coverage settings into a file this guard does not read, or edits the CI
-command that applies the floor. Each of those makes the number look the same while
-testing less.
+commands that apply the floor and the evaluation gate. Each of those makes the number look
+the same while testing less.
 
 All git access goes through `collect_rules` and `check`, which take the git runner as a
 parameter and are tested against real temporary repositories; `main` only prints.
@@ -31,6 +31,9 @@ SHADOWING_CONFIG_PATHS = ("backend/.coveragerc", "backend/setup.cfg", "backend/t
 """Coverage reads these before pyproject.toml, so settings there would bypass the guard."""
 
 CI_GATE_COMMAND = 'uv run pytest --cov --cov-fail-under="$(cat coverage_floor.txt)"'
+EVAL_GATE_COMMAND = "uv run arena-wizard eval run --check --base"
+"""The evaluation gate (decision 0006); dropping it would merge unmeasured scoring changes."""
+CI_GATE_COMMANDS = (CI_GATE_COMMAND, EVAL_GATE_COMMAND)
 
 Git = Callable[..., "subprocess.CompletedProcess[str]"]
 
@@ -205,8 +208,11 @@ def structural_failures(root: Path) -> tuple[str, ...]:
         if (root / path).exists()
     ]
     ci = _read(root, None, CI_PATH, run_git)
-    if ci is None or CI_GATE_COMMAND not in ci:
-        failures.append(f"{CI_PATH} no longer runs `{CI_GATE_COMMAND}`")
+    failures += [
+        f"{CI_PATH} no longer runs `{command}`"
+        for command in CI_GATE_COMMANDS
+        if ci is None or command not in ci
+    ]
     return tuple(failures)
 
 
