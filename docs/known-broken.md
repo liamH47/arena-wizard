@@ -14,5 +14,3 @@ same change that fixes it.
   when a FRA Sealed file can be measured.
 - **The FastAPI test client emits a Starlette deprecation warning** asking for `httpx2`.
   Harmless today; revisit when upgrading Starlette.
-- **No license.** The code is public but not open source in the legal sense until the
-  owner chooses one.
