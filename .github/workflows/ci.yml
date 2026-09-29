@@ -1,0 +1,116 @@
+name: CI
+
+# Runs on every pull request and on pushes to main. Render deploys only after every check
+# on a commit passes (autoDeployTrigger: checksPass, added with the deploy milestone), so
+# these jobs are the deploy gate as well as the review gate.
+#
+# workflow_dispatch exists for one failure: a push that never produced a run. Render treats
+# zero checks as "do not deploy", silently; dispatching against the branch re-runs these
+# jobs on its HEAD and un-sticks it.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a branch makes its in-flight run obsolete. Never cancel a run on main.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (ruff, mypy, pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        # Exact pins: setup-uv publishes no floating major tag, and the uv version matches
+        # the one that wrote uv.lock.
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Type check
+        run: uv run mypy src tests
+
+      # The coverage gate lives here and in the verify skill, not in pytest addopts, so a
+      # single-file run during development never fails on coverage. The floor-guard job
+      # stops the number in coverage_floor.txt from ever going down.
+      - name: Test with coverage gate
+        run: uv run pytest --cov --cov-fail-under="$(cat coverage_floor.txt)"
+
+  floor-guard:
+    name: Coverage ratchet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The guard compares against origin/main, so it needs the full history.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv python install && uv sync --frozen
+
+      - name: Refuse a lower floor, new pragmas, or new exclusions
+        working-directory: backend
+        env:
+          # Compare with the branch this PR targets; pushes to main compare with main.
+          FLOOR_GUARD_BASE: origin/${{ github.base_ref || 'main' }}
+        run: uv run python -m arena_wizard.devtools.floor_guard
+
+  frontend:
+    name: Frontend (tsc, oxlint, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build

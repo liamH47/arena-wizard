@@ -1,0 +1,279 @@
+{
+ "adventure": {
+  "arena_id": 103373,
+  "artist": "Kieran Yanner",
+  "card_faces": [
+   {
+    "artist": "Kieran Yanner",
+    "mana_cost": "{W}",
+    "name": "Bofur, Reliable Guardian",
+    "oracle_text": "Lifelink",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Legendary Creature — Dwarf Scout"
+   },
+   {
+    "artist": "Kieran Yanner",
+    "mana_cost": "{1}{W}",
+    "name": "Concerted Care",
+    "oracle_text": "Target artifact or creature you control gains hexproof and indestructible until end of turn. (Then exile this card. You may cast the creature later from exile.)",
+    "type_line": "Instant — Adventure"
+   }
+  ],
+  "cmc": 1.0,
+  "collector_number": "6",
+  "color_identity": [
+   "W"
+  ],
+  "colors": [
+   "W"
+  ],
+  "id": "6b8e6435-7de4-41d5-bc7d-8e24c11897d0",
+  "image_uris": {
+   "normal": "https://cards.scryfall.io/normal/front/6/b/6b8e6435-7de4-41d5-bc7d-8e24c11897d0.jpg?1785496981"
+  },
+  "layout": "adventure",
+  "mana_cost": "{W} // {1}{W}",
+  "name": "Bofur, Reliable Guardian // Concerted Care",
+  "object": "card",
+  "oracle_id": "8a0e35ac-6c03-4922-b3b4-e419419fe3d7",
+  "power": "1",
+  "rarity": "uncommon",
+  "released_at": "2026-08-14",
+  "set": "hob",
+  "toughness": "1",
+  "type_line": "Legendary Creature — Dwarf Scout // Instant — Adventure"
+ },
+ "basic": {
+  "arena_id": 102726,
+  "artist": "Joshua Raphael",
+  "cmc": 0.0,
+  "collector_number": "267",
+  "color_identity": [
+   "W"
+  ],
+  "colors": [],
+  "id": "a845de50-4af0-4f4a-9c2a-db587973571c",
+  "image_uris": {
+   "normal": "https://cards.scryfall.io/normal/front/a/8/a845de50-4af0-4f4a-9c2a-db587973571c.jpg?1783903615"
+  },
+  "layout": "normal",
+  "mana_cost": "",
+  "name": "Plains",
+  "object": "card",
+  "oracle_id": "bc71ebf6-2056-41f7-be35-b2e5c34afa99",
+  "oracle_text": "({T}: Add {W}.)",
+  "produced_mana": [
+   "W"
+  ],
+  "rarity": "common",
+  "released_at": "2026-04-24",
+  "set": "sos",
+  "type_line": "Basic Land — Plains"
+ },
+ "bonus_sheet": {
+  "arena_id": 102753,
+  "artist": "Zuzanna Wużyk",
+  "cmc": 4.0,
+  "collector_number": "1",
+  "color_identity": [
+   "W"
+  ],
+  "colors": [
+   "W"
+  ],
+  "id": "674e08ef-5291-4465-99c0-7313698f7a93",
+  "image_uris": {
+   "normal": "https://cards.scryfall.io/normal/front/6/7/674e08ef-5291-4465-99c0-7313698f7a93.jpg?1783903936"
+  },
+  "layout": "normal",
+  "mana_cost": "{3}{W}",
+  "name": "Akroma's Will",
+  "object": "card",
+  "oracle_id": "fd949f82-fc10-4e37-8aa9-6c7569fe3c55",
+  "oracle_text": "Choose one. If you control a commander as you cast this spell, you may choose both instead.\n• Creatures you control gain flying, vigilance, and double strike until end of turn.\n• Creatures you control gain lifelink, indestructible, and protection from each color until end of turn.",
+  "rarity": "mythic",
+  "released_at": "2026-04-24",
+  "set": "soa",
+  "type_line": "Instant"
+ },
+ "hybrid_no_arena_id": {
+  "artist": "Igor Grechanyi",
+  "cmc": 1.0,
+  "collector_number": "123",
+  "color_identity": [
+   "B",
+   "W"
+  ],
+  "colors": [
+   "B",
+   "W"
+  ],
+  "id": "bb975803-9bf2-401e-9414-d272df314398",
+  "image_uris": {
+   "normal": "https://cards.scryfall.io/normal/front/b/b/bb975803-9bf2-401e-9414-d272df314398.jpg?1789556847"
+  },
+  "layout": "normal",
+  "mana_cost": "{W/B}",
+  "name": "Blessed Ghoul",
+  "object": "card",
+  "oracle_id": "fe99d90e-4809-4310-a3f7-ceb540511d55",
+  "oracle_text": "Lifelink\n{2}{W/B}: Return this card from your graveyard to your hand.",
+  "power": "1",
+  "rarity": "common",
+  "released_at": "2026-10-02",
+  "set": "fra",
+  "toughness": "1",
+  "type_line": "Creature — Zombie Cleric"
+ },
+ "normal": {
+  "arena_id": 102461,
+  "artist": "Loïc Canavaggia",
+  "cmc": 5.0,
+  "collector_number": "2",
+  "color_identity": [],
+  "colors": [],
+  "id": "2565e16a-ed31-4867-adb8-f1633d580397",
+  "image_uris": {
+   "normal": "https://cards.scryfall.io/normal/front/2/5/2565e16a-ed31-4867-adb8-f1633d580397.jpg?1783903710"
+  },
+  "layout": "normal",
+  "mana_cost": "{5}",
+  "name": "Rancorous Archaic",
+  "object": "card",
+  "oracle_id": "6a68fcaf-b1e8-451d-8e1c-b47db55c83cc",
+  "oracle_text": "Reach, trample\nConverge — This creature enters with a +1/+1 counter on it for each color of mana spent to cast it.",
+  "power": "2",
+  "rarity": "common",
+  "released_at": "2026-04-24",
+  "set": "sos",
+  "toughness": "2",
+  "type_line": "Creature — Avatar"
+ },
+ "prepare": {
+  "arena_id": 102471,
+  "artist": "Lindsey Look",
+  "card_faces": [
+   {
+    "artist": "Lindsey Look",
+    "mana_cost": "{W}",
+    "name": "Elite Interceptor",
+    "oracle_text": "This creature enters prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Human Wizard"
+   },
+   {
+    "artist": "Lindsey Look",
+    "mana_cost": "{1}{W}",
+    "name": "Rejoinder",
+    "oracle_text": "You may tap or untap target creature.\nDraw a card.",
+    "type_line": "Sorcery"
+   }
+  ],
+  "cmc": 1.0,
+  "collector_number": "12",
+  "color_identity": [
+   "W"
+  ],
+  "colors": [
+   "W"
+  ],
+  "id": "2970683e-e69c-42cb-a067-34abd56fb42b",
+  "image_uris": {
+   "normal": "https://cards.scryfall.io/normal/front/2/9/2970683e-e69c-42cb-a067-34abd56fb42b.jpg?1783903706"
+  },
+  "layout": "prepare",
+  "mana_cost": "{W} // {1}{W}",
+  "name": "Elite Interceptor // Rejoinder",
+  "object": "card",
+  "oracle_id": "d97de156-5a6d-4dc6-953e-d4bad63cbad2",
+  "power": "1",
+  "rarity": "common",
+  "released_at": "2026-04-24",
+  "set": "sos",
+  "toughness": "2",
+  "type_line": "Creature — Human Wizard // Sorcery"
+ },
+ "special_guest": {
+  "artist": "Aurore Folny",
+  "cmc": 4.0,
+  "collector_number": "149",
+  "color_identity": [
+   "U"
+  ],
+  "colors": [
+   "U"
+  ],
+  "id": "d583783f-623c-40dd-9dac-0937d65f9341",
+  "image_uris": {
+   "normal": "https://cards.scryfall.io/normal/front/d/5/d583783f-623c-40dd-9dac-0937d65f9341.jpg?1783903580"
+  },
+  "layout": "normal",
+  "mana_cost": "{2}{U}{U}",
+  "name": "Archaeomancer",
+  "object": "card",
+  "oracle_id": "a91a3266-cadd-47a0-9b20-160307f14c07",
+  "oracle_text": "When this creature enters, return target instant or sorcery card from your graveyard to your hand.",
+  "power": "1",
+  "rarity": "mythic",
+  "released_at": "2026-04-24",
+  "set": "spg",
+  "toughness": "2",
+  "type_line": "Creature — Human Wizard"
+ },
+ "transform": {
+  "arena_id": 98520,
+  "artist": "Annie Stegg",
+  "card_faces": [
+   {
+    "artist": "Annie Stegg",
+    "colors": [
+     "G"
+    ],
+    "image_uris": {
+     "normal": "https://cards.scryfall.io/normal/front/2/0/2094f9b6-ce84-47d9-8819-81db14ba483f.jpg?1783904424"
+    },
+    "mana_cost": "{2}{G}",
+    "name": "Trystan, Callous Cultivator",
+    "oracle_text": "Deathtouch\nWhenever this creature enters or transforms into Trystan, Callous Cultivator, mill three cards. Then if there is an Elf card in your graveyard, you gain 2 life.\nAt the beginning of your first main phase, you may pay {B}. If you do, transform Trystan.",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Elf Druid"
+   },
+   {
+    "artist": "Annie Stegg",
+    "color_indicator": [
+     "B"
+    ],
+    "colors": [
+     "B"
+    ],
+    "image_uris": {
+     "normal": "https://cards.scryfall.io/normal/back/2/0/2094f9b6-ce84-47d9-8819-81db14ba483f.jpg?1783904424"
+    },
+    "mana_cost": "",
+    "name": "Trystan, Penitent Culler",
+    "oracle_text": "Deathtouch\nWhenever this creature transforms into Trystan, Penitent Culler, mill three cards, then you may exile an Elf card from your graveyard. If you do, each opponent loses 2 life.\nAt the beginning of your first main phase, you may pay {G}. If you do, transform Trystan.",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Elf Warlock"
+   }
+  ],
+  "cmc": 3.0,
+  "collector_number": "199",
+  "color_identity": [
+   "B",
+   "G"
+  ],
+  "id": "2094f9b6-ce84-47d9-8819-81db14ba483f",
+  "layout": "transform",
+  "name": "Trystan, Callous Cultivator // Trystan, Penitent Culler",
+  "object": "card",
+  "oracle_id": "961d1128-a022-480c-918e-16ba0abf844b",
+  "rarity": "rare",
+  "released_at": "2026-01-23",
+  "set": "ecl",
+  "type_line": "Legendary Creature — Elf Druid // Legendary Creature — Elf Warlock"
+ }
+}

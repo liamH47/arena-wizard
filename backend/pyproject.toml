@@ -1,0 +1,70 @@
+[project]
+name = "arena-wizard"
+version = "0.1.0"
+description = "Sealed-deck recommendations for MTG Arena Best-of-One sealed"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "pyyaml>=6.0.3",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+arena-wizard = "arena_wizard.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/arena_wizard"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "D"]
+# D205/D209 police docstring layout. The rule that matters here is that every module,
+# class, and function HAS a docstring, which the rest of "D" enforces.
+ignore = ["D205", "D209"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.mypy]
+strict = true
+python_version = "3.13"
+
+[tool.pytest.ini_options]
+# No coverage gate here: a --cov-fail-under in addopts fires on every single-file run.
+# The gate lives in CI and the verify skill, read from coverage_floor.txt.
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["src/arena_wizard"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# main() is orchestration only and is deliberately never unit-tested; logic that lives
+# there gets extracted into pure functions instead.
+exclude_also = [
+    'def main\(',
+    'if __name__ == .__main__.:',
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.9",
+    "types-pyyaml>=6.0.12.20260906",
+]

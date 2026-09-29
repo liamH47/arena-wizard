@@ -1,0 +1,18 @@
+# Reality Fracture. Arena release 2026-09-29 per the MTG Arena announcements of
+# 2026-09-28; paper release 2026-10-02 from Scryfall. The FRA Special Guests are SPG 159
+# to 168, dated 2026-10-02 on Scryfall. No 17Lands file exists yet, so the card table
+# cannot be checked against a header until one does.
+code: FRA
+name: Reality Fracture
+arena_release_date: 2026-09-29
+paper_release_date: 2026-10-02
+formats: [bo1_sealed]
+card_set_codes: [FRA, SPG]
+scryfall_queries:
+  - "set:fra"
+  - "set:spg date=2026-10-02"
+seventeenlands_expansion: FRA
+# Not yet measured. Widened around the SOS and HOB ranges until the first FRA file lands.
+nonbasic_pool_range: [78, 86]
+stats_sources:
+  bo1_sealed: [Sealed, ArenaDirect_Sealed, PremierDraft]
