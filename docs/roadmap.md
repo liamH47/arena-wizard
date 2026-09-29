@@ -23,8 +23,6 @@ decisions so they are not re-litigated.
 - Write `config/bombs/SOS.yaml` and `HOB.yaml` with the friends, from set reviews with
   citations, before seeing the automatic list.
 - Check whether the Arena phone client can export a Limited-event deck.
-- Make "Backend", "Coverage ratchet", and "Frontend" required status checks on `main` in
-  the GitHub branch settings, so a failing ratchet actually blocks a merge.
 
 ## Decisions already made
 
