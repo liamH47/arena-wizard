@@ -32,10 +32,14 @@ entry, or an `omit` entry to reach green; `floor_guard` will fail the PR.
 
 ## Data rules
 
-- 17Lands public files are the only 17Lands source until decision 0002 records
-  permission. Never call the 17Lands JSON endpoints before that.
-- Respect `SetConfig.embargo_until`: no 17Lands-derived view of a set before its 12th day
-  on Arena.
+- 17Lands public files are the only automated 17Lands source until decision 0002
+  records permission. Never call the 17Lands JSON endpoints before that.
+- Decision 0005 allows manual data entry from any source: a user uploads a file they
+  exported or pastes text they copied, by hand. The app never fetches it itself. Each paste names its source and date,
+  at most one per source, set, dataset, and UTC day, and permitted automated data replaces
+  it once available. Pasted data stays in the private database: never in the repo, the
+  eval report, fixtures, or logs; fixtures use made-up numbers in the same layout.
+- Respect `SetConfig.embargo_until` for everything except data a user pasted in.
 - Attribution stays at the top of every page and the top of the README.
 - Production never calls Scryfall; card tables are regenerated with
   `uv run arena-wizard sync-cards` and reviewed as a diff.

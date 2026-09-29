@@ -1,6 +1,6 @@
 # 0002: Ask 17Lands before polling its JSON endpoints
 
-Status: **pending**. The owner posts the request below on the 17Lands Discord (linked from
+Status: **pending**. Decision 0005 (manual data entry) added a third question to the request. The owner posts the request below on the 17Lands Discord (linked from
 https://www.17lands.com/usage_guidelines) and records the reply here with its date.
 Opened 2026-09-28.
 
@@ -34,10 +34,9 @@ by JavaScript.
 ## The request to post
 
 Revised 2026-09-28 after the milestone-0 panel (decision 0004): the counts are now exact,
-every poll is named, and the text no longer calls the code open source, because no license
-has been chosen.
+and every poll is named. The code is open source under the MIT License (PR #3).
 
-> Hi 17Lands team. I'm building a free tool with public code
+> Hi 17Lands team. I'm building a free, open-source (MIT) tool
 > (https://github.com/liamH47/arena-wizard) that recommends Bo1 sealed decks for a small
 > private group of friends. It is calibrated on your public game datasets, credited with
 > links at the top of every page under CC BY 4.0. It never calls your site on behalf of a
@@ -57,6 +56,10 @@ has been chosen.
 >    That is at most 10 requests a day, and 6 outside an Arena Direct.
 > 2. For the new-set embargo: Reality Fracture reaches Arena on 2026-09-29. We read "the
 >    12th day" as 2026-10-10. Is that right, or do you mean the second Monday, 2026-10-12?
+> 3. Until the public files or the endpoints are available for a set, one of us copies the
+>    card and deck-color tables from your site by hand at most once a day, and the tool
+>    uses them privately for our group: never republished, never committed to the public
+>    repository. If you'd rather we didn't, tell us and we'll stop.
 >
 > If the answer to the first question is no, we'll use only the public datasets. Thanks for
 > the data and the tools.

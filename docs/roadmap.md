@@ -9,7 +9,7 @@ decisions so they are not re-litigated.
 |---|---|---|
 | 0 | Bootstrap: tooling, CI, verify skill, agents, decision log, card tables | in review (PR #1) |
 | 1 | CLI slice with the evaluation harness | next |
-| 2 | FRA event mode (expert ratings, curated bombs, embargo) | planned |
+| 2 | FRA event mode (expert ratings, curated bombs, embargo, manual data entry) | planned |
 | 3 | Web app and deploy | planned |
 | 4 | Refresh, keep-warm, observability | planned |
 | 5 | Trends and bombs pages | planned |
@@ -23,8 +23,6 @@ decisions so they are not re-litigated.
 - Write `config/bombs/SOS.yaml` and `HOB.yaml` with the friends, from set reviews with
   citations, before seeing the automatic list.
 - Check whether the Arena phone client can export a Limited-event deck.
-- Make "Backend", "Coverage ratchet", and "Frontend" required status checks on `main` in
-  the GitHub branch settings, so a failing ratchet actually blocks a merge.
 
 ## Decisions already made
 
@@ -37,7 +35,10 @@ Recorded so they are not re-litigated:
 - **No LLM in v1** — parsing, building, scoring, and explanations are deterministic.
 - **Zero added hosting cost** — Render free, Neon free, GitHub Actions schedules.
 - **Public repo from the start; no session URLs, emails, or the allow-list in it.**
-- **17Lands public files only until permission is recorded** — decision 0002.
+- **17Lands public files are the only automated source until permission is recorded** —
+  decision 0002.
+- **Users may paste data in by hand from any source: labelled, private, one paste per
+  source, set, dataset, and UTC day, replaced by permitted automated data** — decision 0005.
 - **Committed card tables, Special Guests selected by date, no `arena_id` dependency** —
   decision 0003; `tests/golden/test_packaged_card_tables.py` enforces it.
 - **Coverage gate in CI and verify, never in pytest addopts; floor only rises** —

@@ -22,6 +22,14 @@ actually run, showing the arithmetic.
   stays off until `docs/decisions/` records a yes (see decision 0002).
 - **17Lands embargo:** third-party tools should not present a new set's data until its
   12th day on Arena. `SetConfig.embargo_until` is release plus 11 days (FRA: 2026-10-10).
+- **Manual data entry (decision 0005, owner override):** a user may paste data copied by
+  hand from any source, at most once per source, set, dataset, and UTC day, labelled with
+  its source and date, kept private, and replaced by permitted automated data once that
+  exists. You dissented on 17Lands and were overruled; enforce the limits exactly rather
+  than re-arguing the decision. Flag any fetching by the app itself, any second paste per
+  day, any pasted data reaching the repo, eval report, fixtures, or logs, and any paste
+  accepted after automated data covers it. When a parser for a new source layout is added,
+  check that source's terms.
 - **17Lands attribution:** visible at the top level with links, never only in a footnote;
   never imply endorsement.
 - **Scryfall:** `/cards/search`, `/cards/named`, `/cards/random`, and `/cards/collection` 2
