@@ -3,6 +3,7 @@ name = "arena-wizard"
 version = "0.1.0"
 description = "Sealed-deck recommendations for MTG Arena Best-of-One sealed"
 requires-python = ">=3.13"
+license = "MIT"
 dependencies = [
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
