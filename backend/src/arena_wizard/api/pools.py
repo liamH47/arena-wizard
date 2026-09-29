@@ -6,6 +6,7 @@ another user's pool id is a 409 that changes nothing.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response
@@ -29,6 +30,7 @@ from arena_wizard.web_build import (
 )
 
 router = APIRouter(prefix="/api/pools")
+CARD_LINE = re.compile(r"^\d+\s+\S")
 
 
 def _format(value: str) -> Format:
@@ -135,7 +137,12 @@ def create_pool(
 
 @router.get("")
 def list_pools(user: CurrentUser, session: DbSession) -> list[dict[str, Any]]:
-    """The user's pools, newest first, without their card lists."""
+    """The user's pools, newest first, without their card lists.
+
+    `has_build` lets the home page open a built pool straight at its decks, and `hint` is
+    the first card line of the export, so pools of the same set can be told apart.
+    """
+    built = repository.pools_with_builds(session, user.user_id)
     return [
         {
             "id": row.id,
@@ -143,9 +150,20 @@ def list_pools(user: CurrentUser, session: DbSession) -> list[dict[str, Any]]:
             "format": row.format,
             "created_at": row.created_at.isoformat(),
             "updated_at": row.updated_at.isoformat(),
+            "has_build": row.id in built,
+            "hint": _hint(row.raw_text),
         }
         for row in repository.list_pools(session, user.user_id)
     ]
+
+
+HINT_CHARS = 48
+
+
+def _hint(text: str) -> str:
+    """The first card line of an export, shortened; empty when there is none."""
+    line = next((line.strip() for line in text.splitlines() if CARD_LINE.match(line.strip())), "")
+    return line if len(line) <= HINT_CHARS else line[: HINT_CHARS - 1] + "…"
 
 
 @router.get("/{pool_id}")

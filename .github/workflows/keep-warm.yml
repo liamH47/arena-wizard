@@ -9,7 +9,11 @@ name: Keep warm
 # and its free CU-hours are not spent. Milestone 4 repoints this at /api/refresh, which
 # doubles as the nightly refresh trigger.
 #
-# A failed ping fails the job, so GitHub emails the owner when the app is down.
+# A failed ping never fails the job. Scheduled runs attach their checks to main's newest
+# commit, and render.yaml deploys only when every check on a commit passes, so a failed
+# ping during an outage would block the very hotfix that ends it. Alerts come from an
+# external uptime monitor instead (docs/runbooks/deploy.md); the outcome is still written
+# to the run's summary and raised as a warning here.
 # GitHub disables scheduled workflows after 60 days without repository activity; re-enable
 # it from the Actions tab (DEBUGGING.md).
 on:
@@ -24,14 +28,23 @@ jobs:
     name: Ping /healthz
     if: github.event_name == 'workflow_dispatch' || vars.KEEP_WARM == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 6
     steps:
       - name: Ping the app
+        continue-on-error: true
         env:
           APP_URL: ${{ vars.APP_URL }}
         run: |
           if [ -z "$APP_URL" ]; then
-            echo "::error::Set the repository variable APP_URL (docs/runbooks/deploy.md)"
-            exit 1
+            echo "::warning::Set the repository variable APP_URL (docs/runbooks/deploy.md)"
+            echo "Keep-warm skipped: APP_URL is not set." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
-          curl -fsS --max-time 60 "$APP_URL/healthz"
+          # A sleeping instance also waits for the database and migrates before /healthz
+          # answers, so allow 90 s and retry twice before calling it down.
+          if curl -fsS --retry 2 --retry-all-errors --max-time 90 "$APP_URL/healthz"; then
+            echo "Keep-warm ping: $APP_URL/healthz answered." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Keep-warm ping failed: $APP_URL/healthz did not answer"
+            echo "Keep-warm ping FAILED: $APP_URL/healthz did not answer." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -39,6 +39,14 @@ gh workflow run ci.yml --ref main
 If it is urgent and the commit is known good, use **Manual Deploy → Deploy latest commit**
 in Render.
 
+## When a failing check blocks the deploy
+
+Render deploys only when every check on the commit passes. The keep-warm job never fails
+for that reason (decision 0008), but if any other check on `main`'s head is red, the
+hotfix will not deploy until it is fixed or re-run. Look at the commit's checks on GitHub;
+for an urgent, known-good commit use **Manual Deploy** in Render. Down alerts come from the
+external uptime monitor (docs/runbooks/deploy.md), not from a failing workflow.
+
 ## A scoring or config change
 
 Any edit to `config/scoring/*.yaml`, the builder, or the eval code changes the public

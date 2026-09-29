@@ -40,8 +40,9 @@ with `database_error`.
   appears in logs.
 - **Neon console.** It shows whether the compute is active or idle, and the month's
   CU-hours and storage against the free limits (100 CU-hours, 0.5 GB).
-- **GitHub → Actions → Keep warm.** A failed run there emails the owner. It means
-  `/healthz` did not answer within 60 s.
+- **The uptime monitor** (docs/runbooks/deploy.md) emails the owner when `/healthz` stops
+  answering. GitHub → Actions → Keep warm never fails (a failed check would block Render's
+  deploys); a ping that did not answer within 90 s shows as a warning in that run's summary.
 
 ## Common failures
 

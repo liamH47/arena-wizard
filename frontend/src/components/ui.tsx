@@ -39,3 +39,16 @@ export function Notice({
     </div>
   )
 }
+
+// A page that could not load: say why, and offer the retry the player would otherwise do
+// by reloading.
+export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Notice tone="error">
+      <p>{message}</p>
+      <Button className="mt-2" onClick={onRetry}>
+        Try again
+      </Button>
+    </Notice>
+  )
+}

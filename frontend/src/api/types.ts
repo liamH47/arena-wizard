@@ -10,6 +10,8 @@ export type User = {
 export type Me = {
   auth: 'off' | 'google'
   user: User | null
+  // May delete any friend's paste (decision 0008); always true with auth off.
+  owner: boolean
 }
 
 export type SetInfo = {
@@ -27,6 +29,12 @@ export type PoolSummary = {
   format: string
   created_at: string
   updated_at: string
+}
+
+export type PoolListItem = PoolSummary & {
+  has_build: boolean
+  // The export's first card line, so pools of one set can be told apart.
+  hint: string
 }
 
 export type PoolEntry = {

@@ -18,13 +18,15 @@ export default function Header() {
 
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto max-w-5xl px-4 py-2 text-xs text-slate-600" data-testid="attribution">
-        Statistics:{' '}
+      <div
+        className="mx-auto max-w-5xl px-4 pt-2 text-xs text-slate-600"
+        data-testid="attribution"
+      >
+        Stats:{' '}
         <a className="underline" href="https://www.17lands.com">
           17Lands
         </a>{' '}
-        card data copied by hand by this group (private), and expert grades credited in each
-        build’s Data block. Not affiliated with or endorsed by 17Lands (
+        card data, hand-copied, private. Not affiliated with or endorsed by 17Lands (
         <a className="underline" href="https://www.17lands.com/usage_guidelines">
           usage guidelines
         </a>

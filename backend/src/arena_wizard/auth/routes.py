@@ -164,10 +164,19 @@ def logout() -> JSONResponse:
 
 @router.get("/api/me")
 def me(request: Request) -> dict[str, Any]:
-    """Always 200, so the login page can ask who is signed in without a redirect loop."""
+    """Always 200, so the login page can ask who is signed in without a redirect loop.
+
+    `owner` says whether this user may delete any friend's paste (decision 0008), so the
+    pastes page shows Delete only where it would work. With auth off, the local user is
+    the owner.
+    """
     settings: Settings = request.app.state.settings
     if settings.auth != "google":
-        return {"auth": "off", "user": asdict(LOCAL_USER)}
+        return {"auth": "off", "user": asdict(LOCAL_USER), "owner": True}
     user = _session_user(request)
     listed = user is not None and user.email in settings.allowed_emails
-    return {"auth": "google", "user": asdict(user) if user and listed else None}
+    return {
+        "auth": "google",
+        "user": asdict(user) if user and listed else None,
+        "owner": bool(listed and user is not None and user.email == settings.owner_email),
+    }

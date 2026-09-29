@@ -19,6 +19,13 @@ async function withinWidth(page: Page, name: string): Promise<void> {
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
 }
 
+// Where an element starts, in page coordinates, measured in screen heights from the top.
+async function screensDown(page: Page, locator: ReturnType<Page['locator']>): Promise<number> {
+  await expect(locator).toBeVisible()
+  const top = await locator.evaluate((el) => el.getBoundingClientRect().top + window.scrollY)
+  return top / (page.viewportSize()?.height ?? 1)
+}
+
 test('on a phone every page fits and the event-night buttons are in reach', async ({
   page,
   request,
@@ -31,9 +38,11 @@ test('on a phone every page fits and the event-night buttons are in reach', asyn
     await noSidewaysScroll(page)
   }
   await page.goto(`/pools/${id}`)
+  expect(await screensDown(page, page.getByRole('button', { name: 'Build decks' }))).toBeLessThanOrEqual(2)
   await withinWidth(page, 'Build decks')
   await page.goto(`/pools/${id}/decks`)
   await expect(page.getByTestId('deck').first()).toBeVisible()
+  expect(await screensDown(page, page.getByTestId('list-row').first())).toBeLessThanOrEqual(2)
   await withinWidth(page, 'Copy list')
   await withinWidth(page, 'Record result')
 })

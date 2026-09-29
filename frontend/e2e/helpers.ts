@@ -34,6 +34,9 @@ export async function builtPool(api: APIRequestContext): Promise<string> {
   })
   if (created.status() !== 201) throw new Error(`creating a pool failed: ${created.status()}`)
   await pasteGrades(api)
-  await api.post(`/api/pools/${id}/builds`)
+  const built = await api.post(`/api/pools/${id}/builds`)
+  if (![200, 201].includes(built.status())) {
+    throw new Error(`building decks failed: ${built.status()} ${await built.text()}`)
+  }
   return id
 }

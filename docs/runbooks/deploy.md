@@ -69,6 +69,18 @@ Under Settings → Secrets and variables → Actions → Variables:
   `.github/workflows/keep-warm.yml` pings `/healthz` every five minutes, so the app never
   sleeps mid-event. The ping does not wake Neon.
 
+The keep-warm job never fails, by design. Scheduled runs attach their checks to `main`'s
+newest commit, and Render deploys a commit only when every check on it passes, so a failed
+ping during an outage would silently block the hotfix that ends it. A failed ping only
+shows as a warning in the run's summary.
+
+**Alerting comes from an external uptime monitor.** Create a free one, for example
+UptimeRobot: an HTTP(S) check on `https://<your-service>.onrender.com/healthz` every
+5 minutes, with email alerts to the owner. `/healthz` opens no database session, so the
+monitor never wakes Neon. It also keeps Render warm on its own; GitHub's scheduled runs are
+routinely delayed, so treat keep-warm.yml as the backup. Outside event windows, pause the
+monitor (or accept that it keeps the instance awake: 744 of the 750 free hours a month).
+
 Add the new "E2E (Docker image)" check to `main`'s required checks.
 
 ## 5. First-deploy checks

@@ -1,11 +1,11 @@
 // One way to talk to the backend. Render's free instance sleeps and Neon's database wakes
-// slowly, so a request that fails with 503 or a network error is retried for up to a
-// minute, and a banner tells the player the server is waking instead of leaving a blank
-// page (docs/plan.md section 9, decision 0008).
+// slowly, so a request that fails with 503 or a network error is retried for up to 90 s,
+// and a banner tells the player the server is waking instead of leaving a blank page
+// (docs/plan.md section 9, decision 0008). A request that is merely slow shows no banner:
+// the banner means "retrying", never "still working".
 
-const RETRY_FOR_MS = 60_000
+const RETRY_FOR_MS = 90_000
 const ATTEMPT_TIMEOUT_MS = 20_000
-const SLOW_AFTER_MS = 3_000
 
 export class ApiError extends Error {
   readonly status: number
@@ -16,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-// ---- the "waking" banner: how many requests are slow or retrying right now --------------
+// ---- the "waking" banner: how many requests are retrying right now ------------------------
 
 let waking = 0
 const listeners = new Set<() => void>()
@@ -100,11 +100,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     headers.set('Content-Type', 'application/json')
   }
   const started = Date.now()
-  let slow = false
-  const slowTimer = setTimeout(() => {
-    slow = true
-    setWaking(1)
-  }, SLOW_AFTER_MS)
+  // Counted once per request however many times it retries, and uncounted exactly once.
+  let retrying = false
   let delay = 1_000
   try {
     for (;;) {
@@ -127,16 +124,15 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       if (Date.now() - started + delay > RETRY_FOR_MS) {
         throw new ApiError(503, 'The server is still waking up. Try again in a minute.')
       }
-      if (!slow) {
-        slow = true
+      if (!retrying) {
+        retrying = true
         setWaking(1)
       }
       await sleep(delay)
       delay = Math.min(delay * 2, 8_000)
     }
   } finally {
-    clearTimeout(slowTimer)
-    if (slow) setWaking(-1)
+    if (retrying) setWaking(-1)
   }
 }
 
@@ -146,4 +142,22 @@ export function jsonBody(value: unknown): RequestInit {
 
 export function newId(): string {
   return crypto.randomUUID()
+}
+
+// Decode an uploaded file the way the server's decode_text does (backend cli.py): a UTF-16
+// byte-order mark decides UTF-16; otherwise strict UTF-8, falling back to Windows-1252,
+// which is what Excel's "CSV" and "Unicode Text" exports use.
+export function decodeUpload(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return new TextDecoder('utf-16le').decode(bytes.subarray(2))
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder('utf-16be').decode(bytes.subarray(2))
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes)
+  } catch {
+    return new TextDecoder('windows-1252').decode(bytes)
+  }
 }

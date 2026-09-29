@@ -161,16 +161,29 @@ def test_me_says_auth_is_off_and_names_the_local_user(tmp_path: Path) -> None:
     _, client, _ = make_app(tmp_path)
     body = client.get("/api/me").json()
     assert body["auth"] == "off" and body["user"]["user_id"] == "local"
+    assert body["owner"] is True
 
 
 def test_me_is_always_200_and_names_only_listed_signed_in_users(tmp_path: Path) -> None:
     app, client, _ = make_app(tmp_path, auth="google")
-    assert client.get("/api/me").json() == {"auth": "google", "user": None}
+    assert client.get("/api/me").json() == {"auth": "google", "user": None, "owner": False}
     signed_in(client, app.state.settings)
-    assert client.get("/api/me").json()["user"]["email"] == FRIEND.email
+    body = client.get("/api/me").json()
+    assert body["user"]["email"] == FRIEND.email and body["owner"] is False
     app.state.settings.allowed_emails.remove(FRIEND.email)
     response = client.get("/api/me")
     assert response.status_code == 200 and response.json()["user"] is None
+    assert response.json()["owner"] is False
+
+
+def test_me_names_the_owner_so_the_pastes_page_can_offer_delete(tmp_path: Path) -> None:
+    app, client, _ = make_app(tmp_path, auth="google")
+    owner = SessionUser(user_id="sub-owner", email="owner@example.com", name="Owner")
+    app.state.settings.allowed_emails.append(owner.email)
+    signed_in(client, app.state.settings, owner)
+    assert client.get("/api/me").json()["owner"] is True
+    app.state.settings.allowed_emails.remove(owner.email)
+    assert client.get("/api/me").json()["owner"] is False
 
 
 def test_api_routes_need_a_session_and_a_delisted_user_is_refused(tmp_path: Path) -> None:

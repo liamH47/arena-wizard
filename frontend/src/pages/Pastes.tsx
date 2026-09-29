@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 
-import { ApiError, jsonBody, request } from '../api/client'
+import { ApiError, decodeUpload, jsonBody, request } from '../api/client'
 import type { Paste, PasteResult, PasteSource, SetInfo } from '../api/types'
 import { Button, Notice } from '../components/ui'
 import { errorText, inputClass, when } from '../format'
+import { useMe } from '../me-context'
 
 // Data a friend exported or copied by hand (decisions 0005, 0007, 0008). The page never
 // reads the clipboard on its own, and a paste's link is only a label.
@@ -14,6 +15,7 @@ const EVENT_TYPES = [
 ]
 
 export default function Pastes() {
+  const me = useMe()
   const [sets, setSets] = useState<SetInfo[]>([])
   const [sources, setSources] = useState<PasteSource[]>([])
   const [setCode, setSetCode] = useState('')
@@ -56,7 +58,9 @@ export default function Pastes() {
 
   async function readFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
-    if (file !== undefined) setText(await file.text())
+    // Bytes, decoded like the server does: Excel saves UTF-16 or Windows-1252, and reading
+    // those as UTF-8 would garble names like "Dáin".
+    if (file !== undefined) setText(decodeUpload(await file.arrayBuffer()))
   }
 
   async function submit(event: FormEvent) {
@@ -82,11 +86,35 @@ export default function Pastes() {
     } catch (e) {
       setResult({ tone: 'error', lines: [errorText(e)] })
     } finally {
+      // "Replace even if smaller" is for one paste only; leaving it on would skip the
+      // guard against a truncated copy on every later paste.
+      setReplace(false)
       setBusy(false)
     }
   }
 
-  async function remove(paste: Paste) {
+  function mayDelete(paste: Paste): boolean {
+    return me !== null && (me.owner || paste.pasted_by === me.user?.user_id)
+  }
+
+  async function remove(shown: Paste) {
+    // Check the list again first: a friend may have replaced this paste since the page
+    // loaded, and the confirmation must name what would actually be deleted.
+    let current: Paste | undefined
+    try {
+      const fresh = await request<Paste[]>(`/api/pastes?set_code=${encodeURIComponent(shown.set_code)}`)
+      setPastes(fresh)
+      current = fresh.find((p) => p.key === shown.key)
+    } catch (e) {
+      setResult({ tone: 'error', lines: [errorText(e)] })
+      return
+    }
+    if (current === undefined) return
+    const paste = current
+    const who = paste.pasted_by === me?.user?.user_id ? 'you' : paste.pasted_by
+    if (!window.confirm(`Delete "${paste.label}" (${paste.rows} rows, pasted by ${who})? Everyone’s next build stops using it.`)) {
+      return
+    }
     try {
       await request(`/api/pastes/${paste.set_code}/${paste.key}`, { method: 'DELETE' })
       load()
@@ -251,9 +279,11 @@ export default function Pastes() {
                   {p.rows} rows
                   {p.replaced_at !== null && ` · replaced ${when(p.replaced_at)}`}
                 </p>
-                <Button kind="danger" onClick={() => void remove(p)}>
-                  Delete
-                </Button>
+                {mayDelete(p) && (
+                  <Button kind="danger" onClick={() => void remove(p)}>
+                    Delete
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

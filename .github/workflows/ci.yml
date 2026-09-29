@@ -198,10 +198,13 @@ jobs:
       - name: The image refuses to boot on Render without production settings
         run: |
           if docker run --rm -e RENDER=true arena-wizard:ci \
-              python -c "from arena_wizard.config import Settings; Settings()"; then
+              python -c "from arena_wizard.config import Settings; Settings()" \
+              > refusal.txt 2>&1; then
             echo "::error::Settings booted on Render without ARENA_WIZARD_ENV=prod"
             exit 1
           fi
+          # Refused for the right reason, not by an unrelated import error.
+          grep -q "ARENA_WIZARD_ENV=prod" refusal.txt || { cat refusal.txt; exit 1; }
 
       # Auth off and SQLite are allowed only in dev; the database lands in the data dir.
       - name: Start the container
