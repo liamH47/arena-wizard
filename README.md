@@ -16,11 +16,18 @@ sealed pools, the decks their owners built, and how those decks did.
 
 Under construction. `docs/roadmap.md` tracks milestones; `docs/plan.md` is the full design.
 
-## Private instance, public code
+## Private instance, open-source code
 
-The code is public and the app is free. The deployed instance is a private one for a group
-of friends, behind Google sign-in. No license has been chosen yet, so the code is not yet
-open source in the legal sense.
+The app is free and the code is open source under the MIT License (see `LICENSE`). The
+deployed instance is a private one for a group of friends, behind Google sign-in; anyone
+can run their own.
+
+## What the license covers
+
+The MIT License covers the code written for this project, nothing else. Card names, rules
+text, and images are the property of Wizards of the Coast. The card tables under
+`backend/src/arena_wizard/data/cards/` are derived from Scryfall's data. Anything derived
+from 17Lands game files remains under CC BY 4.0 with its attribution.
 
 ## Development
 
