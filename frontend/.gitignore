@@ -1,0 +1,2 @@
+# Playwright's HTML report (test-results/ is ignored at the repository root).
+playwright-report/

@@ -84,6 +84,25 @@ def test_pools_list_newest_first_and_stay_private(
     assert got.status_code == 200 and got.json()["id"] == older
 
 
+def test_the_pool_list_says_which_pools_are_built_and_hints_at_their_cards(
+    tmp_path: Path,
+) -> None:
+    _, client, _ = make(tmp_path)
+    long_name = "1 " + "A Very Long Made-up Card Name That Keeps Going" + " (FRA) 1"
+    unbuilt = create(client, text="Deck\n" + long_name).json()["id"]
+    built = create(client).json()["id"]
+    empty = create(client, text="Deck\nSideboard").json()["id"]
+    assert client.post(f"/api/pools/{built}/builds", headers=as_user(ALICE)).status_code == 201
+    listed = {p["id"]: p for p in client.get("/api/pools", headers=as_user(ALICE)).json()}
+    assert listed[built]["has_build"] is True
+    assert listed[unbuilt]["has_build"] is False
+    hint = listed[unbuilt]["hint"]
+    assert hint.startswith("1 A Very Long") and hint.endswith("…") and len(hint) == 48
+    assert listed[built]["hint"] == fra_pool().splitlines()[0].strip()
+    assert listed[empty]["hint"] == ""
+    assert client.get("/api/pools", headers=as_user(BOB)).json() == []
+
+
 def test_unrecognised_lines_come_back_as_warnings(
     app_client: tuple[FastAPI, TestClient, sessionmaker[Session]],
 ) -> None:

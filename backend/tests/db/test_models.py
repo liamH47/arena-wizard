@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -85,3 +86,19 @@ def test_the_migration_lock_statement_is_an_advisory_lock_only_on_postgres() -> 
     """The lock itself is proven against a real Postgres in test_postgres.py."""
     assert migration_lock_sql("postgresql") == f"SELECT pg_advisory_xact_lock({MIGRATION_LOCK})"
     assert migration_lock_sql("sqlite") == "SELECT 1"
+
+
+def test_a_sqlite_file_in_a_missing_directory_is_created_on_first_connect(tmp_path: Path) -> None:
+    target = tmp_path / "fresh" / "nested" / "web.db"
+    engine = make_engine(f"sqlite:///{target.as_posix()}")
+    with engine.connect():
+        pass
+    engine.dispose()
+    assert target.is_file()
+
+
+def test_an_in_memory_sqlite_database_needs_no_directory() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    with engine.connect():
+        pass
+    engine.dispose()

@@ -151,6 +151,17 @@ def list_pools(session: Session, user_id: str) -> list[PoolRow]:
     return list(session.scalars(query.order_by(PoolRow.created_at.desc(), PoolRow.id)))
 
 
+def pools_with_builds(session: Session, user_id: str) -> set[str]:
+    """Which of a user's pools have at least one build, for the home page's links."""
+    query = (
+        select(BuildRow.pool_id)
+        .join(PoolRow, PoolRow.id == BuildRow.pool_id)
+        .where(PoolRow.user_id == user_id)
+        .distinct()
+    )
+    return set(session.scalars(query))
+
+
 def get_pool(session: Session, user_id: str, pool_id: str) -> PoolRow:
     """One of the user's pools.
 

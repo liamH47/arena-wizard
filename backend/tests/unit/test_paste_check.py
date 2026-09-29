@@ -57,7 +57,7 @@ def test_text_from_another_set_is_refused() -> None:
 @pytest.mark.parametrize("damaged", ["Card ?? Mangled", "D�in"])
 def test_names_damaged_by_an_encoding_are_refused(damaged: str) -> None:
     rows = [_row(n) for n in NAMES] + [_row(damaged)]
-    with pytest.raises(PasteRefused, match="damaged on the way in"):
+    with pytest.raises(PasteRefused, match="damaged on the way in.*upload the exported file"):
         _check(_cards(rows))
 
 

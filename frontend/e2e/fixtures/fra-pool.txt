@@ -1,0 +1,84 @@
+Deck
+1 Sphinx of False Conclusions (FRA) 40
+1 Hall of Echoes (FRA) 179
+1 Solitary Cell (FRA) 149
+1 Unsummon (FRA) 46
+1 Marwyn, the Preserver (FRA) 263
+1 Formidable Commons (FRA) 178
+1 Saheeli, Consul of Oversight (FRA) 203
+1 Geist of Saint Thalia (FRA) 214
+1 Graft Surgeon (FRA) 10
+1 Prophesied End (FRA) 17
+1 Extrapolate the Impossible (FRA) 55
+1 Garruk, Veiled Butcher (FRA) 229
+1 Tethermage's Advantage (FRA) 117
+1 Haunted Ridge (FRA) 180
+1 Undulating Witness (FRA) 45
+1 Winter, Team Player (FRA) 256
+1 Eye of Jace (FRA) 170
+1 Karn, Argent Defender (FRA) 279
+1 Jace, Reality Sculptor (FRA) 216
+1 Greenhouse Propagator (FRA) 104
+1 Gideon the Oathless (FRA) 230
+1 No Admittance (FRA) 89
+1 Something Worth Saving (FRA) 114
+1 Way of the Mind Sculptor (FRA) 224
+1 Yuriko, Blade of the Mighty (FRA) 210
+1 Edgar, Ancient Bloodlord (FRA) 270
+1 Flourishing Grapple (FRA) 102
+1 Traxos, Scourge Eternal (FRA) 280
+1 Proft, Consulting Detective (FRA) 218
+1 Tenured Tethermage (FRA) 154
+1 Primal Witchstalker (FRA) 144
+1 Pia, Aether Ascetic (FRA) 264
+1 Chandra, Chill of Compliance (FRA) 212
+1 Arni, Renowned Champion (FRA) 243
+1 Titanbones, Towering Heart (FRA) 266
+1 Blazing Crescendo (FRA) 75
+1 Uldaros Theorix (FRA) 159
+1 Theorix Charm (FRA) 155
+1 Thalia, the Survivor (FRA) 205
+1 Dark Matter Manipulator (FRA) 52
+1 Stingerquill Annex (FRA) 190
+1 Artifist Acumen (FRA) 73
+1 Ingris Stingerquill (FRA) 137
+1 Craterclaw Colossus (FRA) 78
+1 Deserted Beach (FRA) 176
+1 Protege's Awakening (FRA) 37
+1 Hallway Heckler // Vicious Verse (FRA) 85
+1 Samut, Tyrant of Naktamun (FRA) 220
+1 Winter, Tormented Loner (FRA) 240
+1 Prudent Fateseer // Peer Review (FRA) 146
+1 Eardrum Rattler (FRA) 81
+1 Afterthought Sentry (FRA) 166
+1 Hungering Puppetbeast (FRA) 107
+1 Generous Revival (FRA) 8
+1 Hexhaven Battalion (FRA) 12
+1 Tomik, Orzhov Lawmage (FRA) 206
+1 Vraska's Final Mercy (FRA) 71
+1 Yargle, Goliath of Otaria (FRA) 225
+1 Curse-Marred Demon (FRA) 79
+1 Stingerquill Charm (FRA) 150
+1 Enlightened Confidant (FRA) 5
+1 Countersculpt (FRA) 25
+1 Shatterwing Pegasus (FRA) 21
+1 Rise of the Deathbringer (FRA) 63
+1 Campus Crier (FRA) 4
+1 Way of the Paradox (FRA) 267
+1 Icy Reception (FRA) 30
+1 Return to the Light Realms (FRA) 20
+1 Ruric Thar, Magecrusher (FRA) 265
+1 Pyre Rhymer // Molten Tide (FRA) 91
+1 Liliana the Repentant (FRA) 231
+1 Theorist's Sanctum (FRA) 191
+1 Wrecking Gecko (FRA) 120
+1 Perfected Theory (FRA) 34
+1 Memory Trap (FRA) 15
+1 Carnivorous Cultivator // Enroot (FRA) 100
+1 Fatehold Chronologist // Peer Review (FRA) 133
+1 Edgar, Moonlit Sovereign (FRA) 257
+1 Silence the Echo (FRA) 66
+1 Compel Brutality (FRA) 101
+1 Overwrite the Multiverse (FRA) 59
+1 Heartstring Puller (FRA) 86
+1 Refute Destiny (FRA) 18

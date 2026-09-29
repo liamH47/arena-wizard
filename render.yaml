@@ -1,0 +1,44 @@
+# Render Blueprint for the private Arena Wizard instance (docs/runbooks/deploy.md).
+#
+# Free web service: it sleeps after 15 idle minutes and wakes in 30 to 60 seconds on the
+# next request; it has no disk, so everything lives in Neon Postgres. A workspace gets 750
+# free instance hours a month, and one always-awake service uses 744 of them in a 31-day
+# month, so no other free service may share this workspace (docs/decisions/0008).
+services:
+  - name: arena-wizard
+    type: web
+    runtime: docker
+    plan: free
+    # Pick the Render region closest to the Neon project's region (for example Oregon with
+    # Neon's AWS us-west-2); every request makes at least one database round trip.
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # /healthz touches no dependency, so Render's checks never wake Neon.
+    healthCheckPath: /healthz
+    # Deploy only after every GitHub check on the commit passes. A commit with zero checks
+    # is never deployed; see docs/runbooks/hotfix.md.
+    autoDeployTrigger: checksPass
+    envVars:
+      # Pinned here, not in the dashboard: the app refuses to boot on Render without them
+      # (fail closed, decision 0008).
+      - key: ARENA_WIZARD_ENV
+        value: prod
+      - key: ARENA_WIZARD_AUTH
+        value: google
+      # Secrets: entered once in Render's dashboard, never committed or pasted in chat.
+      - key: ARENA_WIZARD_GOOGLE_CLIENT_ID
+        sync: false
+      - key: ARENA_WIZARD_GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: ARENA_WIZARD_SECRET_KEY
+        generateValue: true
+      - key: ARENA_WIZARD_PUBLIC_URL
+        sync: false
+      - key: ARENA_WIZARD_ALLOWED_EMAILS
+        sync: false
+      - key: ARENA_WIZARD_OWNER_EMAIL
+        sync: false
+      # Neon's pooled connection string (the host name contains "-pooler").
+      - key: ARENA_WIZARD_DATABASE_URL
+        sync: false

@@ -69,6 +69,20 @@ npm run lint
 npm run build
 ```
 
+## 5. Docker image and end-to-end tests
+
+CI's "E2E (Docker image)" job. It needs Docker running; skip it locally when Docker is
+unavailable and let CI run it. From the repository root:
+
+```
+docker build -t arena-wizard:ci .
+docker run --rm -e RENDER=true arena-wizard:ci python -c "from arena_wizard.config import Settings; Settings()"   # must fail
+docker run -d --name arena-wizard-ci -p 8000:8000 -e ARENA_WIZARD_ENV=dev -e ARENA_WIZARD_AUTH=off -e ARENA_WIZARD_DATA_DIR=/tmp arena-wizard:ci
+curl -sf http://localhost:8000/healthz
+cd frontend && npx playwright install chromium && E2E_BASE_URL=http://localhost:8000 npm run e2e
+docker rm -f arena-wizard-ci
+```
+
 ## Notes
 
 - Node is pinned in `frontend/.nvmrc`; a different major version is a plausible source of

@@ -56,8 +56,8 @@ def _resolve_names[Row: (CardDataRow, GradeRow)](
     damaged = [name for name in unknown if any(mark in name for mark in ENCODING_DAMAGE)]
     if damaged:
         raise PasteRefused(
-            f"names were damaged on the way in ({damaged[0]!r}); save the export to a file "
-            "and pass --file instead of piping it"
+            f"names were damaged on the way in ({damaged[0]!r}); upload the exported file "
+            "instead of pasting or piping it"
         )
     if rows and len(matched) < MIN_MATCHED_ROWS * len(rows):
         raise PasteRefused(

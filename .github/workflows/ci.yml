@@ -181,3 +181,82 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  docker-e2e:
+    name: E2E (Docker image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # No other job builds the image, so nothing else would notice a Dockerfile that
+      # serves 404s: /healthz is an API route that never touches the frontend.
+      - name: Build the production image
+        run: docker build -t arena-wizard:ci .
+
+      # Fail closed (decision 0008): on Render (RENDER=true) the app must refuse to boot
+      # without ARENA_WIZARD_ENV=prod. This must exit non-zero.
+      - name: The image refuses to boot on Render without production settings
+        run: |
+          if docker run --rm -e RENDER=true arena-wizard:ci \
+              python -c "from arena_wizard.config import Settings; Settings()" \
+              > refusal.txt 2>&1; then
+            echo "::error::Settings booted on Render without ARENA_WIZARD_ENV=prod"
+            exit 1
+          fi
+          # Refused for the right reason, not by an unrelated import error.
+          grep -q "ARENA_WIZARD_ENV=prod" refusal.txt || { cat refusal.txt; exit 1; }
+
+      # Auth off and SQLite are allowed only in dev; the database lands in the data dir.
+      - name: Start the container
+        run: >
+          docker run -d --name arena-wizard-ci -p 8000:8000
+          -e ARENA_WIZARD_ENV=dev -e ARENA_WIZARD_AUTH=off -e ARENA_WIZARD_DATA_DIR=/tmp
+          arena-wizard:ci
+
+      - name: Wait for the health check
+        run: |
+          for attempt in $(seq 1 90); do
+            if curl -sf http://localhost:8000/healthz > /dev/null; then
+              echo "Container healthy after ${attempt}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Container never became healthy"
+          docker logs arena-wizard-ci
+          exit 1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run end-to-end tests
+        working-directory: frontend
+        run: npm run e2e
+        env:
+          E2E_BASE_URL: http://localhost:8000
+
+      # Traces and screenshots are the only way to diagnose a CI-only failure.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs arena-wizard-ci
