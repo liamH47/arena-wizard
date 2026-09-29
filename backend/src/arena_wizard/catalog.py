@@ -9,7 +9,6 @@ shows up as a readable diff.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -17,6 +16,7 @@ from typing import Any
 
 from arena_wizard.domain.cards import Card, CardFace, Color, Rarity
 from arena_wizard.domain.sets import EventType
+from arena_wizard.fileio import atomic_write_bytes
 
 FORMAT_VERSION = 1
 CARD_TABLE_DIR = Path(__file__).resolve().parent / "data" / "cards"
@@ -203,11 +203,7 @@ def write_card_table(table: CardTable, path: Path) -> bool:
     # rewritten, not crash the next sync.
     if path.is_file() and path.read_bytes() == data:
         return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # Write beside the target, then swap, so an interrupted run never leaves a partial file.
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_bytes(data)
-    os.replace(temporary, path)
+    atomic_write_bytes(path, data)
     return True
 
 
