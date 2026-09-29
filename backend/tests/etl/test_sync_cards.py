@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from arena_wizard.catalog import unresolved_names
-from arena_wizard.cli import SyncCardsCommand, run
+from arena_wizard.commands import sync_cards
 from arena_wizard.domain.sets import EventType, SetConfig, parse_set_config
 from arena_wizard.etl.sync_cards import compute_card_table, fetch_card_sources
 from arena_wizard.sources.http import SourceError
@@ -138,23 +138,25 @@ def _sha(path: Path) -> str:
 def test_syncing_twice_rewrites_nothing_and_a_source_change_rewrites_the_table(
     world: FakeWorld, clock: FakeClock, tmp_path: Path
 ) -> None:
-    command = SyncCardsCommand(set_codes=("SOS",), out_dir=tmp_path)
     ctx = make_context(world.handle, clock)
     lines: list[str] = []
 
-    assert run(command, ctx, load_config=lambda code: _config(), echo=lines.append) == 0
+    def run_sync() -> int:
+        return sync_cards(("SOS",), tmp_path, ctx, lambda code: _config(), lines.append)
+
+    assert run_sync() == 0
     path = tmp_path / "SOS.json"
     first = _sha(path)
     assert "4 printings" in lines[-1] and "written" in lines[-1]
 
-    assert run(command, ctx, load_config=lambda code: _config(), echo=lines.append) == 0
+    assert run_sync() == 0
     assert _sha(path) == first
     assert lines[-1].endswith("unchanged")
 
     edited = copy.deepcopy(world.searches["set:sos game:arena"][0])
     edited["oracle_text"] = "Errata: this card now does something else."
     world.searches["set:sos game:arena"] = [edited, *world.searches["set:sos game:arena"][1:]]
-    assert run(command, ctx, load_config=lambda code: _config(), echo=lines.append) == 0
+    assert run_sync() == 0
     assert _sha(path) != first
     assert "Errata" in path.read_text(encoding="utf-8")
     assert lines[-1].endswith("written")
@@ -166,7 +168,7 @@ def test_syncing_twice_rewrites_nothing_and_a_source_change_rewrites_the_table(
         c for c in world.searches["set:sos game:arena"] if c["id"] != prepare_id
     ]
     world.headers[EventType.SEALED].remove(prepare["card_faces"][0]["name"])
-    assert run(command, ctx, load_config=lambda code: _config(), echo=lines.append) == 0
+    assert run_sync() == 0
     assert prepare_id not in path.read_text(encoding="utf-8")
     assert "3 printings" in lines[-1]
     assert not list(tmp_path.glob("*.tmp"))
@@ -177,11 +179,8 @@ def test_unresolved_header_names_fail_the_command_and_are_named(
 ) -> None:
     world.headers[EventType.SEALED].append("Ghost Card")
     lines: list[str] = []
-    status = run(
-        SyncCardsCommand(set_codes=("SOS",), out_dir=tmp_path),
-        make_context(world.handle, clock),
-        load_config=lambda code: _config(),
-        echo=lines.append,
+    status = sync_cards(
+        ("SOS",), tmp_path, make_context(world.handle, clock), lambda code: _config(), lines.append
     )
     assert status == 1
     assert lines[-1] == "SOS: 1 header names did not resolve: Ghost Card"
@@ -191,11 +190,8 @@ def test_unresolved_header_names_fail_the_command_and_are_named(
 def test_a_set_with_no_file_yet_says_so(world: FakeWorld, clock: FakeClock, tmp_path: Path) -> None:
     world.headers = {}
     lines: list[str] = []
-    run(
-        SyncCardsCommand(set_codes=("SOS",), out_dir=tmp_path),
-        make_context(world.handle, clock),
-        load_config=lambda code: _config(),
-        echo=lines.append,
+    sync_cards(
+        ("SOS",), tmp_path, make_context(world.handle, clock), lambda code: _config(), lines.append
     )
     assert "header: no 17Lands file yet" in lines[0]
 

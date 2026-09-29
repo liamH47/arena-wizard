@@ -7,6 +7,8 @@ import pytest
 
 from arena_wizard.devtools.floor_guard import (
     CI_GATE_COMMAND,
+    CI_GATE_COMMANDS,
+    EVAL_GATE_COMMAND,
     CoverageRules,
     GuardError,
     check,
@@ -134,6 +136,9 @@ def _write(root: Path, path: str, text: str) -> None:
     file.write_text(text, encoding="utf-8", newline="\n")
 
 
+CI_TEXT = "steps:\n" + "".join(f"  - run: {command} origin/main\n" for command in CI_GATE_COMMANDS)
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A repository whose `base` branch has a floor of 100, one pragma, and an intact CI."""
@@ -141,7 +146,7 @@ def repo(tmp_path: Path) -> Path:
     _write(tmp_path, "backend/coverage_floor.txt", "100\n")
     _write(tmp_path, "backend/pyproject.toml", PYPROJECT)
     _write(tmp_path, "backend/src/pkg/a.py", f"x = 1  {PRAGMA}\ny = 2\n")
-    _write(tmp_path, ".github/workflows/ci.yml", f"steps:\n  - run: {CI_GATE_COMMAND}\n")
+    _write(tmp_path, ".github/workflows/ci.yml", CI_TEXT)
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-q", "-m", "base")
     _git(tmp_path, "branch", "base")
@@ -186,14 +191,22 @@ def test_moving_coverage_settings_into_a_coveragerc_fails(repo: Path) -> None:
 
 
 def test_editing_the_ci_gate_command_fails(repo: Path) -> None:
-    _write(repo, ".github/workflows/ci.yml", "steps:\n  - run: uv run pytest --cov-fail-under=0\n")
-    assert len(check(repo, "base")) == 1
-    assert "no longer runs" in check(repo, "base")[0]
+    edited = CI_TEXT.replace(CI_GATE_COMMAND, "uv run pytest --cov-fail-under=0")
+    _write(repo, ".github/workflows/ci.yml", edited)
+    assert check(repo, "base") == (f".github/workflows/ci.yml no longer runs `{CI_GATE_COMMAND}`",)
 
 
-def test_a_missing_ci_workflow_fails(repo: Path) -> None:
+def test_dropping_the_evaluation_gate_from_ci_fails(repo: Path) -> None:
+    _write(repo, ".github/workflows/ci.yml", f"steps:\n  - run: {CI_GATE_COMMAND}\n")
+    assert check(repo, "base") == (
+        f".github/workflows/ci.yml no longer runs `{EVAL_GATE_COMMAND}`",
+    )
+
+
+def test_a_missing_ci_workflow_fails_for_both_gates(repo: Path) -> None:
     (repo / ".github" / "workflows" / "ci.yml").unlink()
-    assert "no longer runs" in check(repo, "base")[0]
+    failures = check(repo, "base")
+    assert len(failures) == 2 and all("no longer runs" in f for f in failures)
 
 
 def test_a_base_that_predates_the_floor_file_is_the_bootstrap(repo: Path) -> None:

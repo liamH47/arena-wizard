@@ -9,7 +9,10 @@ settled there or in `docs/decisions/`. `docs/roadmap.md` says which milestone is
 
 ## Checks
 
-Run the `verify` skill before every PR; it is exactly what CI runs. The coverage gate is
+Run the `verify` skill before every PR; it is exactly what CI runs. It includes the
+evaluation gate: a change to scoring, the builder, or the eval code must regenerate
+`backend/eval/report.json` and `report.md` with `uv run arena-wizard eval run` and commit
+them with the change, with the eval delta in the PR (decision 0006). The coverage gate is
 branch coverage at `backend/coverage_floor.txt` (100), passed on the command line, never
 in pytest `addopts`. The floor only rises. Never add a coverage pragma, an `exclude_also`
 entry, or an `omit` entry to reach green; `floor_guard` will fail the PR.
@@ -60,7 +63,8 @@ owner once). Record the result in `docs/decisions/NNNN-slug.md`. Required panels
 - A new data source or a permission change: data-source-steward,
   pipeline-integrity-reviewer, card-data-verifier.
 - Curated bombs or ratings: sealed-analyst and card-data-verifier, authored before the
-  automatic list is shown, never in the same PR as a scoring change.
+  automatic list is shown, never in the same PR as a scoring change. Never print, quote, or
+  commit automatic bomb names while a set has no curated list.
 - Pages: event-night-ux, edge-case-hunter.
 
 ## Git
