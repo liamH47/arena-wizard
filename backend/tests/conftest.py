@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import socket
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,8 @@ import pytest
 from arena_wizard.sources.http import DEFAULT_INTERVALS, SourceContext, Throttle, build_client
 
 FIXTURES = Path(__file__).parent / "fixtures"
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+"""Local socket pairs (asyncio on Windows) may connect; nothing else may."""
 
 
 class FakeClock:
@@ -39,6 +42,31 @@ def make_context(handler: Handler, clock: FakeClock) -> SourceContext:
         monotonic=clock.now,
         throttle=Throttle(DEFAULT_INTERVALS),
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolated(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep every test away from the owner's real data, cache, and network (decision 0007).
+
+    Private pastes live under the data directory; a test that forgot to pass one would
+    otherwise read or overwrite real pasted data. Sockets are blocked so that only an
+    injected `httpx.MockTransport` can answer a request.
+    """
+    home = tmp_path_factory.mktemp("home")
+    for name in ("HOME", "USERPROFILE"):
+        monkeypatch.setenv(name, str(home))
+    monkeypatch.setenv("ARENA_WIZARD_DATA_DIR", str(tmp_path_factory.mktemp("data")))
+    monkeypatch.setenv("ARENA_WIZARD_CACHE_DIR", str(tmp_path_factory.mktemp("cache")))
+
+    real_connect = socket.socket.connect
+
+    def local_only(sock: socket.socket, address: Any) -> None:
+        host = address[0] if isinstance(address, tuple) else address
+        if host not in LOOPBACK:
+            raise OSError(f"tests may not open network connections (tried {host!r})")
+        real_connect(sock, address)
+
+    monkeypatch.setattr(socket.socket, "connect", local_only)
 
 
 @pytest.fixture

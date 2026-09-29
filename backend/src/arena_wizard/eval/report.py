@@ -18,13 +18,14 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import statistics
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from arena_wizard.catalog import CardTable
 from arena_wizard.domain.cards import Card, Color, Rarity
-from arena_wizard.domain.decks import ScoredDeck
+from arena_wizard.domain.decks import CardValue, ScoredDeck, ValueBasis
 from arena_wizard.domain.pool import Pool, PoolEntry
 from arena_wizard.domain.scoring import ScoringConfig
 from arena_wizard.domain.sets import Format
@@ -42,7 +43,13 @@ from arena_wizard.engine.builder import (
 from arena_wizard.engine.mana import can_cast, castable_cost
 from arena_wizard.engine.resolver import CardIndex
 from arena_wizard.engine.roles import Role, classify
-from arena_wizard.engine.values import FormatMeans, format_means, spell_rarities
+from arena_wizard.engine.values import (
+    FormatMeans,
+    card_value,
+    format_means,
+    pair_value,
+    spell_rarities,
+)
 from arena_wizard.eval.metrics import (
     Binomial,
     Estimate,
@@ -88,6 +95,8 @@ class PoolOutcome:
     top_cards: tuple[str, ...]
     evaluations: int
     unresolved: int
+    baseline_pairs: tuple[str, ...] | None = None
+    """The data-free baseline's top decks' colors, best first; None when not run."""
 
     @property
     def player_pair(self) -> str:
@@ -98,6 +107,91 @@ class PoolOutcome:
     def engine_pair(self) -> str | None:
         """The main colors of the engine's top deck."""
         return self.decks[0].colors if self.decks else None
+
+
+@dataclass(frozen=True, slots=True)
+class RarityBaseline:
+    """Card-weighted mean value and spread of each rarity's spells in one set.
+
+    Used, leave-one-set-out, for the data-free baseline: the engine with no win rates, no
+    grades, and no bombs, valuing each card at the other set's average for its rarity
+    (decision 0007). Card-weighted, because that is what a random opened card is worth.
+    """
+
+    q: Mapping[Rarity, float]
+    se: Mapping[Rarity, float]
+
+
+def rarity_baseline(
+    snapshot: Snapshot, table: CardTable, config: ScoringConfig
+) -> RarityBaseline | None:
+    """Each rarity's mean and spread of card values over spells with games. Pure.
+
+    Returns:
+        The baseline, or None when the snapshot has no games in hand.
+    """
+    rarity_of = spell_rarities(table.cards)
+    means = format_means(snapshot, rarity_of)
+    if means is None:
+        return None
+    by_rarity: dict[Rarity, list[float]] = {}
+    for name, rarity in sorted(rarity_of.items()):
+        counts = snapshot.cards.get(name)
+        if counts is None or counts.games_gih == 0:
+            continue
+        by_rarity.setdefault(rarity, []).append(
+            card_value(name, rarity, counts, means, config, "").q
+        )
+    return RarityBaseline(
+        q={r: statistics.fmean(qs) for r, qs in by_rarity.items()},
+        se={r: statistics.pstdev(qs) for r, qs in by_rarity.items()},
+    )
+
+
+def leave_one_out(
+    baselines: Mapping[str, RarityBaseline | None],
+) -> dict[str, RarityBaseline | None]:
+    """Give each set the other sets' rarity averages, averaged by rarity. Pure.
+
+    A set's own pre-split values would flatter its baseline compared with a new set,
+    where the averages necessarily come from other sets. None when no other set has one.
+    """
+    result: dict[str, RarityBaseline | None] = {}
+    for code in baselines:
+        others = [b for other, b in sorted(baselines.items()) if other != code and b is not None]
+        if not others:
+            result[code] = None
+            continue
+        rarities = sorted({r for b in others for r in b.q}, key=lambda r: r.value)
+        result[code] = RarityBaseline(
+            q={r: statistics.fmean(b.q[r] for b in others if r in b.q) for r in rarities},
+            se={r: statistics.fmean(b.se[r] for b in others if r in b.se) for r in rarities},
+        )
+    return result
+
+
+def baseline_inputs(pool: Pool, baseline: RarityBaseline, config: ScoringConfig) -> BuildInputs:
+    """Builder inputs for the data-free baseline: rarity averages only, no bombs. Pure."""
+    values = {
+        e.card.front_name: CardValue(
+            name=e.card.front_name,
+            q=baseline.q.get(e.card.rarity, 0.0),
+            observed=None,
+            used=None,
+            prior_share=None,
+            games=0,
+            source="rarity average from the other set",
+            se=baseline.se.get(e.card.rarity, 0.0),
+            basis=ValueBasis.RARITY,
+        )
+        for e in pool.entries
+    }
+    return BuildInputs(
+        values=values,
+        pairs={pair_code(p): pair_value(pair_code(p), None, None, config) for p in PAIRS},
+        bombs={},
+        config=config,
+    )
 
 
 def _is_land(card: Card) -> bool:
@@ -190,8 +284,9 @@ def evaluate_pool(
     config: ScoringConfig,
     curated: tuple[CuratedBomb, ...],
     set_code: str,
+    baseline: RarityBaseline | None = None,
 ) -> PoolOutcome:
-    """Build, score, and compare one pool. Pure."""
+    """Build, score, and compare one pool, and the data-free baseline when given. Pure."""
     pool, unresolved = resolve_record(record, index, set_code)
     inputs = prepare_inputs(pool, snapshot, rarity_of, config, curated)
     result = build_decks(pool, inputs)
@@ -224,6 +319,10 @@ def evaluate_pool(
         raw = raw_deck_score(build.deck, index, inputs, means)
         scores.append(Scored(deck.total, raw, build.games, build.wins))
     top = sorted(inputs.values.values(), key=lambda v: (-v.q, v.name))[:5]
+    baseline_pairs = None
+    if baseline is not None:
+        baseline_decks = build_decks(pool, baseline_inputs(pool, baseline, config)).decks
+        baseline_pairs = tuple(d.colors for d in baseline_decks)
     return PoolOutcome(
         record=record,
         decks=result.decks,
@@ -236,6 +335,7 @@ def evaluate_pool(
         top_cards=tuple(v.name for v in top),
         evaluations=result.evaluations,
         unresolved=unresolved,
+        baseline_pairs=baseline_pairs,
     )
 
 
@@ -390,7 +490,32 @@ def set_metrics(
         "max": max(evaluations, default=0),
     }
     metrics["unresolved_names"] = sum(o.unresolved for o in outcomes)
+    metrics |= data_free_metrics(two, hit1)
     return metrics
+
+
+def data_free_metrics(two: Sequence[PoolOutcome], hit1: Sequence[bool]) -> dict[str, Any]:
+    """Agreement for the data-free baseline, and pools it and the engine split on.
+
+    Kept out of the decision digest and the absolute gates: it measures what the engine
+    is worth with no win rates and no grades, not a decision the engine makes.
+    """
+    if not two or any(o.baseline_pairs is None for o in two):
+        return {
+            "data_free_pair_agreement_at_1": None,
+            "data_free_pair_agreement_at_3": None,
+            "data_free_flips_vs_engine": None,
+        }
+    base1 = [(o.baseline_pairs or ())[:1] == (o.player_pair,) for o in two]
+    base3 = [o.player_pair in (o.baseline_pairs or ())[:3] for o in two]
+    return {
+        "data_free_pair_agreement_at_1": _estimate(wilson(sum(base1), len(two))),
+        "data_free_pair_agreement_at_3": _estimate(wilson(sum(base3), len(two))),
+        "data_free_flips_vs_engine": {
+            "engine_only": sum(h and not b for h, b in zip(hit1, base1, strict=True)),
+            "baseline_only": sum(b and not h for h, b in zip(hit1, base1, strict=True)),
+        },
+    }
 
 
 def ledger(outcomes: Sequence[PoolOutcome]) -> list[dict[str, Any]]:
@@ -509,18 +634,26 @@ def evaluate_set(
     config: ScoringConfig,
     curated: tuple[CuratedBomb, ...],
     provenance: Mapping[str, Any],
+    baseline: RarityBaseline | None = None,
 ) -> tuple[dict[str, Any], str]:
-    """Evaluate one set; return its report section and its decision digest. Pure."""
+    """Evaluate one set; return its report section and its decision digest. Pure.
+
+    `baseline` is the other set's rarity averages, for the data-free baseline; without it
+    the baseline's metrics are None.
+    """
     rarity_of = spell_rarities(table.cards)
 
-    def run(rs: Sequence[PoolRecord]) -> list[PoolOutcome]:
-        return [evaluate_pool(r, index, snapshot, rarity_of, config, curated, set_code) for r in rs]
+    def run(rs: Sequence[PoolRecord], base: RarityBaseline | None) -> list[PoolOutcome]:
+        return [
+            evaluate_pool(r, index, snapshot, rarity_of, config, curated, set_code, base)
+            for r in rs
+        ]
 
-    outcomes = run(records)
+    outcomes = run(records, baseline)
     rng = random.Random(SEED)
     section = {
         "provenance": dict(provenance),
-        "metrics": set_metrics(outcomes, run(switch_records), rng),
+        "metrics": set_metrics(outcomes, run(switch_records, None), rng),
         "bombs": bomb_section(automatic_bombs(snapshot, rarity_of, config), curated),
         "ledger": ledger(outcomes),
         "pool_picks": {
@@ -695,7 +828,26 @@ def _set_markdown(code: str, section: Mapping[str, Any]) -> list[str]:
             f"| {', '.join(row['top_cards'])} |"
         )
     lines += ["", f"{len(section['ledger'])} rows in all; the full ledger is in report.json.", ""]
-    return lines
+    return lines + _baseline_markdown(m)
+
+
+def _baseline_markdown(m: Mapping[str, Any]) -> list[str]:
+    """The data-free baseline, or a line saying it was not run."""
+    lines = [
+        "### Baseline: no win rates (rarity averages from the other set, castability, curve; "
+        "no bombs)",
+        "",
+    ]
+    at1, at3 = m.get("data_free_pair_agreement_at_1"), m.get("data_free_pair_agreement_at_3")
+    flips = m.get("data_free_flips_vs_engine")
+    if at1 is None or at3 is None or flips is None:
+        return lines + ["Not run: it needs another pinned set's rarity averages.", ""]
+    return lines + [
+        f"Agreement with players at 1: {_fmt(at1['value'])} ({_interval(at1)}, n {at1['n']}); "
+        f"at 3: {_fmt(at3['value'])} ({_interval(at3)}). Pools the engine gets right and this "
+        f"baseline does not: {flips['engine_only']}; the reverse: {flips['baseline_only']}.",
+        "",
+    ]
 
 
 def render_markdown(report: Mapping[str, Any]) -> str:

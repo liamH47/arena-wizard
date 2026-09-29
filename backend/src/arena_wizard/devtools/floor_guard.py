@@ -4,7 +4,8 @@ Fails a pull request that lowers `coverage_floor.txt`, adds coverage-exclusion p
 widens what coverage skips (exclusions, partial branches, omitted files), changes what it
 measures, moves coverage settings into a file this guard does not read, or edits the CI
 commands that apply the floor and the evaluation gate. Each of those makes the number look
-the same while testing less.
+the same while testing less. It also fails when a file carrying the private-data marker,
+which every pasted-data file has, appears in the repository.
 
 All git access goes through `collect_rules` and `check`, which take the git runner as a
 parameter and are tested against real temporary repositories; `main` only prints.
@@ -19,6 +20,8 @@ import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+from arena_wizard.datadir import PRIVATE_MARKER
 
 PRAGMA_PATTERN = r"#[[:space:]]*pragma[:[:space:]]?[[:space:]]*no[[:space:]]*(cover|branch)"
 """Every spelling coverage.py honours (it matches case-insensitively), as a git-grep ERE."""
@@ -216,6 +219,32 @@ def structural_failures(root: Path) -> tuple[str, ...]:
     return tuple(failures)
 
 
+def private_data_failures(root: Path, git: Git = run_git) -> tuple[str, ...]:
+    """Find files in the repository that carry the private-data marker (decision 0007).
+
+    Every file the private paste store writes carries `PRIVATE_MARKER`, so one showing up
+    in the work tree (tracked, or untracked and not ignored) is pasted data about to be
+    committed.
+
+    Args:
+        root: The repository root.
+        git: Runs git; injected for tests.
+
+    Returns:
+        One message naming the files, or nothing.
+
+    Raises:
+        GuardError: git grep failed, which must not be read as "no private data".
+    """
+    grep = git(root, "grep", "-l", "-F", "--untracked", "-e", PRIVATE_MARKER)
+    if grep.returncode == 1:
+        return ()
+    if grep.returncode != 0:
+        raise GuardError(f"git grep failed ({grep.returncode}): {grep.stderr.strip()}")
+    files = sorted(line.strip() for line in grep.stdout.splitlines() if line.strip())
+    return (f"private pasted data is in the repository: {', '.join(files)}",)
+
+
 def check(root: Path, base_ref: str, git: Git = run_git) -> tuple[str, ...]:
     """Run every check of the working tree against a base ref.
 
@@ -232,7 +261,11 @@ def check(root: Path, base_ref: str, git: Git = run_git) -> tuple[str, ...]:
     head = collect_rules(root, None, git)
     if head is None:
         return (f"{FLOOR_PATH} is missing",)
-    return structural_failures(root) + evaluate(collect_rules(root, base_ref, git), head)
+    return (
+        structural_failures(root)
+        + private_data_failures(root, git)
+        + evaluate(collect_rules(root, base_ref, git), head)
+    )
 
 
 def main() -> None:

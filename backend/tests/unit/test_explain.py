@@ -4,11 +4,25 @@ import dataclasses
 import datetime as dt
 from collections.abc import Collection, Mapping
 
-from arena_wizard.domain.decks import LandEntry, ScoredDeck, ScoreTerm
+from arena_wizard.domain.decks import (
+    CardValue,
+    LandEntry,
+    LayerShare,
+    ScoredDeck,
+    ScoreTerm,
+    ValueBasis,
+)
 from arena_wizard.domain.pool import PoolEntry
 from arena_wizard.domain.stats import SourceRef
 from arena_wizard.engine.builder import build_decks
-from arena_wizard.engine.explain import arena_list, describe, pair_sentence, window
+from arena_wizard.engine.explain import (
+    arena_list,
+    describe,
+    describe_event,
+    pair_sentence,
+    value_line,
+    window,
+)
 from arena_wizard.engine.values import PairValue
 from tests.engine_fixture import (
     R,
@@ -250,3 +264,150 @@ def test_the_arena_list_puts_creatures_then_spells_by_cost_and_name_then_lands()
             "8 Island",
         ]
     )
+
+
+def _event_value(
+    name: str, q: float, basis: ValueBasis, *, se: float = 3.0, source: str = "draft grades"
+) -> CardValue:
+    layers: tuple[LayerShare, ...] = (LayerShare("draft grades", 1.0),)
+    observed, games = None, 0
+    if basis in (ValueBasis.WIN_RATES, ValueBasis.DRAFT_PROXY):
+        layers = (LayerShare("draft grades", 0.25), LayerShare("Arena Direct", 0.75))
+        observed, games = 0.575, 1234
+    grades = (("LLU", "B+"), ("LSV", "3.5")) if basis is ValueBasis.GRADES else ()
+    return CardValue(name, q, observed, None, 0.25, games, source, se, basis, layers, grades)
+
+
+def _event_deck(
+    values: dict[str, tuple[float, ValueBasis]], *, total: float = 10.0, colors: str = "WU"
+) -> ScoredDeck:
+    deck = _deck(list(values), total=total, colors=colors)
+    return dataclasses.replace(
+        deck, values=tuple(_event_value(n, q, b) for n, (q, b) in values.items())
+    )
+
+
+def test_each_value_line_says_what_the_value_rests_on() -> None:
+    assert value_line(_event_value("A", 2.15, ValueBasis.WIN_RATES)) == (
+        "A: +2.1 ±3.0, 57.5% in hand (n=1,234); weight: draft grades 25%, Arena Direct 75%"
+    )
+    assert value_line(_event_value("A", 1.5, ValueBasis.GRADES)) == (
+        "A: +1.5 ±3.0 from draft grades (LLU B+, LSV 3.5)"
+    )
+    assert value_line(
+        _event_value("A", 0.3, ValueBasis.RARITY_GRADE, source="common average grade")
+    ) == ("A: +0.3 ±3.0, ungraded: common average grade")
+    assert value_line(_event_value("A", -0.6, ValueBasis.RARITY, source="common average")) == (
+        "A: -0.6 ±3.0, common average (no win rates or grade for this card)"
+    )
+
+
+def _event_sentences(
+    *decks: ScoredDeck, bombs: Mapping[str, float] | None = None, curated: bool = True
+) -> list[tuple[str, ...]]:
+    return [d.explanations for d in describe_event(decks, bombs or {}, curated)]
+
+
+def test_event_bombs_are_not_assessed_without_a_curated_list() -> None:
+    deck = _event_deck({"A": (1.0, ValueBasis.GRADES)})
+    ((_, bombs),) = _event_sentences(deck, curated=False)
+    assert bombs.startswith("Bombs: not assessed.")
+    ((_, none),) = _event_sentences(deck)
+    assert none == "Bombs: none from the group's curated list."
+    ((_, named),) = _event_sentences(deck, bombs={"A": 1.0})
+    assert named == "Bombs: A (the group's curated list)."
+
+
+def test_the_basis_sentence_counts_each_kind_and_names_ungraded_cards() -> None:
+    ungraded = {f"U{i}": (0.0, ValueBasis.RARITY_GRADE) for i in range(7)}
+    mixed = _event_deck(
+        {
+            "Win": (1.0, ValueBasis.WIN_RATES),
+            "Draft": (1.0, ValueBasis.DRAFT_PROXY),
+            "Graded": (1.0, ValueBasis.GRADES),
+            "Rare": (1.0, ValueBasis.RARITY),
+            **ungraded,
+        }
+    )
+    ((basis, _),) = _event_sentences(mixed)
+    assert basis == (
+        "Values: 1 from win rates, 1 from draft win rates, 1 from draft grades, 1 from rarity "
+        "averages, 7 ungraded at their rarity's average grade (U0, U1, U2, U3, U4, and 2 more)."
+    )
+    only_ungraded = _event_deck({"U": (0.0, ValueBasis.RARITY_GRADE)})
+    ((basis, _),) = _event_sentences(only_ungraded)
+    assert basis == "Values: 1 ungraded at their rarity's average grade (U)."
+    ((empty, _),) = _event_sentences(dataclasses.replace(only_ungraded, values=()))
+    assert empty == "Values:."
+
+
+def test_a_grades_only_lead_is_ranked_not_measured_and_never_ahead() -> None:
+    first = dataclasses.replace(
+        _event_deck({"A": (4.0, ValueBasis.GRADES), "S": (0.0, ValueBasis.GRADES)}, total=20),
+        gap_to_next=9.0,
+        gap_se=4.0,
+    )
+    second = _event_deck({"B": (1.0, ValueBasis.GRADES), "S": (0.0, ValueBasis.GRADES)})
+    (sentences, _) = _event_sentences(first, second)
+    lead = sentences[-1]
+    assert "Ahead of" not in lead
+    assert lead == (
+        "Ranked above WU on draft grades and deck shape: 9.0 score points higher, against grade "
+        "uncertainty of ±4.0 (assumed, not measured; grade error only). "
+        "Cards only here: A; only there: B."
+    )
+
+
+def test_a_grades_only_toss_up_names_grade_uncertainty() -> None:
+    first = dataclasses.replace(
+        _event_deck({"A": (1.0, ValueBasis.GRADES)}), gap_to_next=1.0, gap_se=4.0
+    )
+    second = _event_deck({"A": (1.0, ValueBasis.GRADES)})
+    (sentences, _) = _event_sentences(first, second)
+    assert sentences[-1] == (
+        "Within grade uncertainty of WU (1.0 score points apart, uncertainty ±4.0): treat the "
+        "order as a toss-up."
+    )
+
+
+def test_with_win_rates_a_lead_states_its_error_and_a_toss_up_one_standard_error() -> None:
+    first = dataclasses.replace(
+        _event_deck({"A": (4.0, ValueBasis.WIN_RATES)}), gap_to_next=6.0, gap_se=2.0
+    )
+    second = _event_deck({"A": (4.0, ValueBasis.WIN_RATES)})
+    (sentences, _) = _event_sentences(first, second)
+    assert sentences[-1] == (
+        "Ahead of WU by 6.0 score points (standard error 2.0, from sample sizes and grade "
+        "uncertainty only)."
+    )
+    close = dataclasses.replace(first, gap_to_next=1.0)
+    (sentences, _) = _event_sentences(close, second)
+    assert sentences[-1].startswith("Within one standard error of WU (1.0 score points apart")
+
+
+def test_a_difference_driven_by_ungraded_cards_says_so() -> None:
+    first = dataclasses.replace(
+        _event_deck({"Guess": (3.0, ValueBasis.RARITY_GRADE), "S": (0.0, ValueBasis.GRADES)}),
+        gap_to_next=9.0,
+        gap_se=4.0,
+    )
+    second = _event_deck({"Known": (1.0, ValueBasis.GRADES), "S": (0.0, ValueBasis.GRADES)})
+    (sentences, _) = _event_sentences(first, second)
+    note = "Most of the card-value difference is from ungraded cards at rarity averages (Guess)."
+    assert note in sentences[-1]
+    level = dataclasses.replace(
+        _event_deck({"Guess": (0.0, ValueBasis.RARITY_GRADE)}), gap_to_next=9.0, gap_se=4.0
+    )
+    other = _event_deck({"Known": (0.0, ValueBasis.GRADES)})
+    (sentences, _) = _event_sentences(level, other)
+    assert "Most of the card-value difference" not in sentences[-1]
+
+
+def test_an_event_splash_names_its_cards_and_land_sources() -> None:
+    bolt = PoolEntry(removal("R Bolt", "{R}"), 1)
+    base = _event_deck({"A": (1.0, ValueBasis.GRADES)})
+    deck = dataclasses.replace(
+        base, splash=R, spells=(bolt, *base.spells), sources=((W, 14), (R, 3))
+    )
+    ((_, _, splash),) = _event_sentences(deck)
+    assert splash == "Splashes R Bolt off 3 red land sources."

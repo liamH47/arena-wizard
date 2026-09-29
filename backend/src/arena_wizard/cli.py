@@ -8,14 +8,16 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from arena_wizard import commands
+from arena_wizard import commands, paste_commands
 from arena_wizard.catalog import CARD_TABLE_DIR
+from arena_wizard.datadir import DATA_DIR_ENV, DataDirError, resolve_data_dir, utc_day
 from arena_wizard.devtools.floor_guard import run_git
 from arena_wizard.domain.sets import (
     EventType,
@@ -24,8 +26,13 @@ from arena_wizard.domain.sets import (
     load_set_config,
     packaged_set_codes,
 )
+from arena_wizard.etl.cache_paths import cache_dir
 from arena_wizard.eval.base import BaseUnavailable, read_base_report
 from arena_wizard.eval.storage import EVAL_DIR
+from arena_wizard.paste_commands import PasteRequest
+from arena_wizard.pastes.check import CARD_DATA_EVENT_TYPES
+from arena_wizard.pastes.sources import DATASETS
+from arena_wizard.pastes.store import read_pastes
 from arena_wizard.sources.http import SourceContext, default_context
 
 
@@ -76,7 +83,37 @@ class EvalRunCommand:
     eval_dir: Path
 
 
-Command = SyncCardsCommand | LoadFileCommand | BuildCommand | EvalBuildSetCommand | EvalRunCommand
+@dataclass(frozen=True, slots=True)
+class PasteCommand:
+    """Store data a person exported or copied by hand (decisions 0005 and 0007)."""
+
+    request: PasteRequest
+    file: Path | None
+    cache: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class PastesCommand:
+    """List a set's stored pastes, or delete one."""
+
+    set_code: str
+    delete: str | None
+
+
+Command = (
+    SyncCardsCommand
+    | LoadFileCommand
+    | BuildCommand
+    | EvalBuildSetCommand
+    | EvalRunCommand
+    | PasteCommand
+    | PastesCommand
+)
+
+PASTE_HELP = (
+    "store data you exported or copied by hand. Decision 0005: by hand only. Never pipe a "
+    "script, a scraper, or an automated download into this command."
+)
 
 
 def _codes(values: list[str] | None, default: tuple[str, ...]) -> tuple[str, ...]:
@@ -115,6 +152,27 @@ def parse_args(argv: Sequence[str]) -> Command:
     build.add_argument("--pool", type=Path, default=None, help="file with the export text")
     build.add_argument("--cache", type=Path, default=None)
 
+    paste = sub.add_parser("paste", help=PASTE_HELP, description=PASTE_HELP)
+    paste.add_argument("--set", required=True)
+    paste.add_argument("--dataset", required=True, choices=list(DATASETS))
+    paste.add_argument("--source", required=True, help="a source id, e.g. llu-marc or own-liam")
+    paste.add_argument(
+        "--event-type",
+        default=None,
+        choices=[e.value for e in CARD_DATA_EVENT_TYPES],
+        help="required for card-data; no default",
+    )
+    paste.add_argument("--copied-on", type=dt.date.fromisoformat, default=None)
+    paste.add_argument("--published-on", type=dt.date.fromisoformat, default=None)
+    paste.add_argument("--url", default=None, help="a label only; never fetched")
+    paste.add_argument("--replace", action="store_true", help="allow a much smaller paste")
+    paste.add_argument("--file", type=Path, default=None, help="the exported file; else stdin")
+    paste.add_argument("--cache", type=Path, default=None)
+
+    pastes = sub.add_parser("pastes", help="list a set's stored pastes, or delete one")
+    pastes.add_argument("--set", required=True)
+    pastes.add_argument("--delete", default=None, help="a key as `pastes` prints it")
+
     evaluate = sub.add_parser("eval", help="the evaluation harness")
     eval_sub = evaluate.add_subparsers(dest="eval_command", required=True)
     build_set = eval_sub.add_parser("build-set", help="derive the sample from cached files")
@@ -135,6 +193,20 @@ def parse_args(argv: Sequence[str]) -> Command:
         return LoadFileCommand(args.set.upper(), EventType(args.event_type), args.cache)
     if args.command == "build":
         return BuildCommand(args.set.upper(), Format(args.format), args.pool, args.cache)
+    if args.command == "paste":
+        request = PasteRequest(
+            set_code=args.set.upper(),
+            dataset=args.dataset,
+            source_id=args.source,
+            event_type=EventType(args.event_type) if args.event_type else None,
+            copied_on=args.copied_on,
+            published_on=args.published_on,
+            url=args.url,
+            replace=args.replace,
+        )
+        return PasteCommand(request, args.file, args.cache)
+    if args.command == "pastes":
+        return PastesCommand(args.set.upper(), args.delete)
     if args.eval_command == "build-set":
         return EvalBuildSetCommand(
             _codes(args.sets, ("SOS", "HOB")), args.size, args.repin, args.eval_dir, args.cache
@@ -147,11 +219,16 @@ class Environment:
     """The outside world, injected so every command is testable."""
 
     context: Callable[[], SourceContext]
-    read_text: Callable[[Path | None], str]
+    read_bytes: Callable[[Path | None], bytes]
     read_base_report: Callable[[str], dict[str, Any] | None]
+    data_dir: Callable[[], Path]
     echo: Callable[[str], None] = print
-    today: Callable[[], dt.date] = dt.date.today
+    now: Callable[[], dt.datetime] = lambda: dt.datetime.now(dt.UTC)
     load_config: Callable[[str], SetConfig] = load_set_config
+
+    def today(self) -> dt.date:
+        """The UTC day: the paste key and the embargo both count in UTC (decision 0007)."""
+        return utc_day(self.now())
 
 
 def run(command: Command, env: Environment) -> int:
@@ -164,16 +241,13 @@ def run(command: Command, env: Environment) -> int:
         return commands.load_game_file(
             command.set_code, command.event_type, env.context(), command.cache, env.echo
         )
-    if isinstance(command, BuildCommand):
-        stats = commands.statistics_for(command.set_code, command.cache)
-        return commands.build(
-            command.set_code,
-            command.format,
-            env.read_text(command.pool_file),
-            stats,
-            env.today(),
-            env.echo,
-        )
+    if isinstance(command, BuildCommand | PasteCommand | PastesCommand):
+        try:
+            data_dir = env.data_dir()
+        except DataDirError as error:
+            env.echo(str(error))
+            return 1
+        return _run_private(command, data_dir, env)
     if isinstance(command, EvalBuildSetCommand):
         return commands.build_eval_set(
             command.set_codes,
@@ -189,6 +263,48 @@ def run(command: Command, env: Environment) -> int:
         env.echo(f"gate: {error}")
         return 1
     return commands.run_eval(command.eval_dir, command.check, base, env.echo)
+
+
+def _run_private(
+    command: BuildCommand | PasteCommand | PastesCommand, data_dir: Path, env: Environment
+) -> int:
+    """Run a command that reads or writes the private data directory."""
+    if isinstance(command, PastesCommand):
+        if command.delete is not None:
+            return paste_commands.delete(command.set_code, command.delete, data_dir, env.echo)
+        return paste_commands.list_pastes(command.set_code, data_dir, env.echo)
+    today = env.today()
+    if isinstance(command, PasteCommand):
+        config = env.load_config(command.request.set_code)
+        return paste_commands.paste(
+            command.request,
+            env.read_bytes(command.file),
+            config,
+            data_dir,
+            command.cache or cache_dir(),
+            today,
+            decode_text,
+            env.echo,
+        )
+    config = env.load_config(command.set_code)
+    pastes, stale = read_pastes(data_dir, command.set_code)
+    data = commands.BuildData(
+        public_sealed=commands.statistics_for(command.set_code, command.cache),
+        public_draft=commands.statistics_for(
+            command.set_code, command.cache, EventType.PREMIER_DRAFT
+        ),
+        pastes=pastes,
+        stale=stale,
+        covered=paste_commands.covered_event_types(config, command.cache or cache_dir(), today),
+    )
+    return commands.build(
+        command.set_code,
+        command.format,
+        decode_text(env.read_bytes(command.pool_file)),
+        data,
+        today,
+        env.echo,
+    )
 
 
 def decode_text(data: bytes) -> str:
@@ -209,13 +325,17 @@ def decode_text(data: bytes) -> str:
 def main() -> None:
     """Entry point for the `arena-wizard` script."""
 
-    def read_text(path: Path | None) -> str:
-        return decode_text(path.read_bytes()) if path else sys.stdin.read()
+    def read_bytes(path: Path | None) -> bytes:
+        # Bytes, not text: the console code page would garble names and keep a BOM.
+        return path.read_bytes() if path else sys.stdin.buffer.read()
+
+    def data_dir() -> Path:
+        return resolve_data_dir(os.environ.get(DATA_DIR_ENV), Path.home())
 
     def read_base(ref: str) -> dict[str, Any] | None:
         root = Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel").stdout.strip())
         return read_base_report(root, ref)
 
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-    env = Environment(default_context, read_text, read_base)
+    env = Environment(default_context, read_bytes, read_base, data_dir)
     sys.exit(run(parse_args(sys.argv[1:]), env))

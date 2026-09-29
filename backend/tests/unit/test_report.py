@@ -8,6 +8,7 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import random
+import statistics
 from collections.abc import Mapping, Sequence
 from functools import cache
 from typing import Any
@@ -15,8 +16,8 @@ from typing import Any
 import pytest
 
 from arena_wizard.catalog import CardTable, load_packaged_card_table
-from arena_wizard.domain.cards import Card, Color
-from arena_wizard.domain.decks import CardValue, LandEntry, ScoredDeck
+from arena_wizard.domain.cards import Card, Color, Rarity
+from arena_wizard.domain.decks import CardValue, LandEntry, ScoredDeck, ValueBasis
 from arena_wizard.domain.pool import Pool, PoolEntry
 from arena_wizard.domain.scoring import ScoringConfig, load_scoring_config
 from arena_wizard.domain.sets import Format
@@ -25,24 +26,35 @@ from arena_wizard.engine.bombs import CuratedBomb
 from arena_wizard.engine.builder import PAIRS, BuildInputs, pair_code
 from arena_wizard.engine.resolver import CardIndex, build_index
 from arena_wizard.engine.roles import Role, classify
-from arena_wizard.engine.values import FormatMeans, PairValue, spell_rarities
+from arena_wizard.engine.values import (
+    FormatMeans,
+    PairValue,
+    card_value,
+    format_means,
+    spell_rarities,
+)
 from arena_wizard.eval.metrics import Scored
 from arena_wizard.eval.records import BuildRecord, PoolRecord
 from arena_wizard.eval.report import (
     NOTES,
     REPORT_FORMAT,
     PoolOutcome,
+    RarityBaseline,
     automatic_bombs,
+    baseline_inputs,
     bomb_section,
     build_report,
     confidence_table,
+    data_free_metrics,
     decision_digest,
     deck_score_metrics,
     evaluate_pool,
     evaluate_set,
     is_legal,
+    leave_one_out,
     ledger,
     naive_picks,
+    rarity_baseline,
     raw_deck_score,
     render_markdown,
     report_to_json,
@@ -713,3 +725,124 @@ def test_the_markdown_is_byte_stable_and_names_what_it_measures() -> None:
     assert "names withheld until the set's curated list exists." in text
     assert "| UG | 0-3 | " in text and " | n/a | " in text
     assert text.endswith(f"- {NOTES[-1]}\n")
+
+
+# --- the data-free baseline (decision 0007) ----------------------------------------------
+
+
+def test_the_rarity_baseline_is_the_card_weighted_mean_and_spread_of_each_rarity() -> None:
+    snapshot = _synthetic_snapshot()
+    baseline = rarity_baseline(snapshot, _table(), _config())
+    assert baseline is not None
+    rarity_of = spell_rarities(_table().cards)
+    means = format_means(snapshot, rarity_of)
+    assert means is not None
+    commons = [
+        card_value(n, r, snapshot.cards[n], means, _config(), "").q
+        for n, r in sorted(rarity_of.items())
+        if r is Rarity.COMMON and snapshot.cards.get(n, None) is not None
+    ]
+    assert baseline.q[Rarity.COMMON] == pytest.approx(statistics.fmean(commons))
+    assert baseline.se[Rarity.COMMON] == pytest.approx(statistics.pstdev(commons))
+    empty = Snapshot("SOS", SourceRef("none", None, None, None, 0), {}, {})
+    assert rarity_baseline(empty, _table(), _config()) is None
+
+
+def test_cards_without_games_are_left_out_of_the_rarity_baseline() -> None:
+    snapshot = _synthetic_snapshot()
+    rarity_of = spell_rarities(_table().cards)
+    rare = sorted(n for n, r in rarity_of.items() if r is Rarity.RARE)[0]
+    zeroed = dataclasses.replace(snapshot, cards=dict(snapshot.cards) | {rare: CardCounts()})
+    with_it = rarity_baseline(snapshot, _table(), _config())
+    without = rarity_baseline(zeroed, _table(), _config())
+    assert with_it is not None and without is not None
+    assert with_it.q[Rarity.RARE] != without.q[Rarity.RARE]
+
+
+def test_baseline_inputs_value_each_card_at_its_rarity_with_no_bombs_or_pairs() -> None:
+    baseline = RarityBaseline(q={Rarity.COMMON: -1.5}, se={Rarity.COMMON: 3.0})
+    common = next(c for c in _spells(W) if c.rarity is Rarity.COMMON)
+    rare = next(c for c in _spells(W) if c.rarity is not Rarity.COMMON)
+    inputs = baseline_inputs(_pool((common, 1), (rare, 1)), baseline, _config())
+    assert inputs.values[common.front_name].q == -1.5
+    assert inputs.values[common.front_name].se == 3.0
+    assert inputs.values[rare.front_name].q == 0.0 and inputs.values[rare.front_name].se == 0.0
+    assert inputs.values[rare.front_name].basis is ValueBasis.RARITY
+    assert inputs.bombs == {} and inputs.max_decks is None
+    assert all(p.points == 0.0 for p in inputs.pairs.values())
+
+
+def _with_baseline(outcome: PoolOutcome, *pairs: str) -> PoolOutcome:
+    return dataclasses.replace(outcome, baseline_pairs=tuple(pairs))
+
+
+def test_data_free_agreement_and_flips_against_the_engine() -> None:
+    a, b, c, d = _set_outcomes()
+    outcomes = [
+        _with_baseline(a, "UR", "WB"),  # engine right at 1, baseline right only at 3
+        _with_baseline(b, "UR"),  # engine wrong, baseline right
+        _with_baseline(c, "WU"),  # three colors: not counted
+        _with_baseline(d),  # no baseline deck at all: a miss
+    ]
+    m = set_metrics(outcomes, [], random.Random(0))
+    at1, at3 = m["data_free_pair_agreement_at_1"], m["data_free_pair_agreement_at_3"]
+    assert (at1["value"], at1["n"]) == (1 / 3, 3)
+    assert at3["value"] == 2 / 3
+    assert m["data_free_flips_vs_engine"] == {"engine_only": 1, "baseline_only": 1}
+
+
+def test_without_a_baseline_for_every_pool_its_metrics_are_unknown() -> None:
+    unknown = {
+        "data_free_pair_agreement_at_1": None,
+        "data_free_pair_agreement_at_3": None,
+        "data_free_flips_vs_engine": None,
+    }
+    assert data_free_metrics([], []) == unknown
+    a, b, _, _ = _set_outcomes()
+    two = [_with_baseline(a, "WB"), b]
+    assert data_free_metrics(two, [True, False]) == unknown
+
+
+def test_a_set_evaluated_with_the_other_set_s_baseline_reports_it_outside_the_digest() -> None:
+    baseline = RarityBaseline(
+        q={Rarity.COMMON: -1.0, Rarity.UNCOMMON: 0.0, Rarity.RARE: 1.0, Rarity.MYTHIC: 2.0},
+        se=dict.fromkeys(Rarity, 3.0),
+    )
+    records = _records()
+    section, digest = evaluate_set(
+        "SOS",
+        records,
+        records[:1],
+        _synthetic_snapshot(),
+        _table(),
+        _index(),
+        _config(),
+        (),
+        {"sample_size": len(records)},
+        baseline,
+    )
+    plain, plain_digest = _evaluated()
+    assert digest == plain_digest
+    m = section["metrics"]
+    assert m["data_free_pair_agreement_at_1"]["n"] == 2
+    assert set(m["data_free_flips_vs_engine"]) == {"engine_only", "baseline_only"}
+    assert plain["metrics"]["data_free_pair_agreement_at_1"] is None
+    text = render_markdown(build_report({"SOS": (section, digest)}, _config()))
+    assert "### Baseline: no win rates (rarity averages from the other set" in text
+    assert "Agreement with players at 1: " in text and "floor" not in text.lower()
+    plain_text = render_markdown(build_report({"SOS": _evaluated()}, _config()))
+    assert "Not run: it needs another pinned set's rarity averages." in plain_text
+
+
+def test_each_set_gets_the_other_sets_rarity_averages_never_its_own() -> None:
+    sos = RarityBaseline(
+        q={Rarity.COMMON: -1.0, Rarity.RARE: 2.0}, se={Rarity.COMMON: 3.0, Rarity.RARE: 4.0}
+    )
+    hob = RarityBaseline(q={Rarity.COMMON: -2.0}, se={Rarity.COMMON: 5.0})
+    assert leave_one_out({"SOS": sos, "HOB": hob}) == {"SOS": hob, "HOB": sos}
+    three = leave_one_out({"SOS": sos, "HOB": hob, "FRA": None})
+    assert three["FRA"] == RarityBaseline(
+        q={Rarity.COMMON: -1.5, Rarity.RARE: 2.0}, se={Rarity.COMMON: 4.0, Rarity.RARE: 4.0}
+    )
+    assert three["SOS"] == hob
+    assert leave_one_out({"SOS": sos}) == {"SOS": None}

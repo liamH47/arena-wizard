@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from arena_wizard.datadir import PRIVATE_MARKER
 from arena_wizard.devtools.floor_guard import (
     CI_GATE_COMMAND,
     CI_GATE_COMMANDS,
@@ -16,6 +17,7 @@ from arena_wizard.devtools.floor_guard import (
     count_pragmas,
     evaluate,
     parse_floor,
+    private_data_failures,
     rules_from_texts,
     run_git,
 )
@@ -226,3 +228,32 @@ def test_an_unreadable_base_ref_fails(repo: Path) -> None:
 def test_a_working_tree_without_a_floor_file_fails(repo: Path) -> None:
     (repo / "backend" / "coverage_floor.txt").unlink()
     assert check(repo, "base") == ("backend/coverage_floor.txt is missing",)
+
+
+def test_a_file_carrying_the_private_marker_fails_whether_committed_or_not(repo: Path) -> None:
+    _write(repo, "backend/eval/leak.json", f'{{"kind": "{PRIVATE_MARKER}"}}\n')
+    assert check(repo, "base") == (
+        "private pasted data is in the repository: backend/eval/leak.json",
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "leak")
+    _write(repo, "notes.txt", PRIVATE_MARKER)
+    assert private_data_failures(repo) == (
+        "private pasted data is in the repository: backend/eval/leak.json, notes.txt",
+    )
+
+
+def test_an_ignored_file_with_the_marker_is_not_in_the_repository(repo: Path) -> None:
+    _write(repo, ".gitignore", "scratch/\n")
+    _write(repo, "scratch/paste.json", PRIVATE_MARKER)
+    assert private_data_failures(repo) == ()
+
+
+def test_a_failing_grep_for_private_data_fails_closed(tmp_path: Path) -> None:
+    with pytest.raises(GuardError, match="broken"):
+        private_data_failures(tmp_path, lambda root, *args: _done(2, stderr="broken"))
+
+
+def test_this_repository_carries_no_private_data() -> None:
+    root = Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel").stdout.strip())
+    assert private_data_failures(root) == ()

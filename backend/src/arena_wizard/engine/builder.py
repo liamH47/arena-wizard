@@ -24,6 +24,8 @@ from arena_wizard.domain.scoring import ScoringConfig
 from arena_wizard.domain.stats import Snapshot
 from arena_wizard.engine.bombs import CuratedBomb, bomb_scores, bombs
 from arena_wizard.engine.castability import shortfall
+from arena_wizard.engine.event_values import DataLayer, event_value
+from arena_wizard.engine.grades import GradeScores
 from arena_wizard.engine.lands import Manabase, build_manabase, land_count
 from arena_wizard.engine.mana import can_cast, castable_cost, requirements
 from arena_wizard.engine.roles import Role, classify
@@ -48,6 +50,8 @@ class BuildInputs:
     pairs: Mapping[str, PairValue]
     bombs: Mapping[str, float]
     config: ScoringConfig
+    max_decks: int | None = None
+    """Event mode lists at most this many decks; None keeps every close deck."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +120,43 @@ def prepare_inputs(
         pairs=pairs,
         bombs=bombs(scores, config.bombs.threshold, curated),
         config=config,
+    )
+
+
+def prepare_event_inputs(
+    pool: Pool,
+    grades: GradeScores | None,
+    proxy: DataLayer | None,
+    direct: DataLayer | None,
+    config: ScoringConfig,
+    curated: tuple[CuratedBomb, ...] = (),
+) -> BuildInputs:
+    """Value a pool without the public Sealed file (decision 0007). Pure.
+
+    Args:
+        pool: The pool.
+        grades: Standardized grades for the set, or None.
+        proxy: Premier Draft win rates, or None.
+        direct: Arena Direct or pasted Sealed win rates, or None.
+        config: The scoring configuration.
+        curated: The set's curated bomb list, the only bombs in event mode.
+
+    Returns:
+        The inputs for `build_decks`, listing at most `config.event.max_decks` decks.
+
+    Raises:
+        ValueError: No grades and no data layers.
+    """
+    values = {
+        entry.card.front_name: event_value(entry.card, grades, proxy, direct, config)
+        for entry in pool.entries
+    }
+    return BuildInputs(
+        values=values,
+        pairs={pair_code(p): pair_value(pair_code(p), None, None, config) for p in PAIRS},
+        bombs=bombs({}, config.bombs.threshold, curated),
+        config=config,
+        max_decks=config.event.max_decks,
     )
 
 
@@ -416,8 +457,9 @@ def build_decks(pool: Pool, inputs: BuildInputs) -> BuildResult:
         inputs: Card values, pair values, bombs, and the configuration.
 
     Returns:
-        The top three decks plus any deck within one standard error of the third, best
-        first, each with its gap to the next; empty when no pair has enough spells.
+        The top three decks plus any deck within one standard error of the third (at most
+        `inputs.max_decks`), best first, each with its gap to the next; empty when no pair
+        has enough spells.
     """
     evaluations = 0
     candidates: list[ScoredDeck] = []
@@ -442,6 +484,8 @@ def build_decks(pool: Pool, inputs: BuildInputs) -> BuildResult:
     if len(ranked_decks) > TOP_N:
         last = keep[-1]
         keep += [d for d in ranked_decks[TOP_N:] if last.total - d.total < _gap_se(last, d, inputs)]
+    if inputs.max_decks is not None:
+        keep = keep[: inputs.max_decks]
     final = []
     for i, deck in enumerate(keep):
         if i + 1 < len(keep):

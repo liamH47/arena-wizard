@@ -227,3 +227,39 @@ def test_an_accepted_entry_without_a_decision_or_a_base_digest_does_not_count() 
     signed = unsigned | {"decision": "docs/decisions/0009-x.md"}
     assert _checks(gate(head, None, [signed])) == [("SOS", "bombs")]
     assert _checks(gate(head, {"sets": {}}, [signed])) == [("SOS", "bombs")]
+
+
+def _versioned(digest: str, engine: str = "2", config: str = "c1") -> dict[str, Any]:
+    return _report(digest) | {"engine_version": engine, "scoring_config": {"sha256": config}}
+
+
+def test_decisions_may_not_change_without_an_engine_or_config_change() -> None:
+    failures = gate(_versioned("new"), _versioned("old"))
+    assert _checks(failures) == [("all", "decisions")]
+    assert "without an engine or config change" in failures[0].message
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        _versioned("new", engine="3"),
+        _versioned("new", config="c2"),
+        _versioned("old"),
+    ],
+)
+def test_changed_decisions_pass_with_a_new_engine_or_config_or_when_unchanged(
+    head: dict[str, Any],
+) -> None:
+    assert gate(head, _versioned("old")) == ()
+
+
+def test_reports_that_do_not_record_engine_and_config_are_not_held_to_it() -> None:
+    base = _versioned("old")
+    del base["scoring_config"]
+    assert gate(_versioned("new"), base) == ()
+    assert gate(_report("new") | {"engine_version": "2"}, _versioned("old")) == ()
+
+
+def test_a_decisions_failure_can_be_accepted_while_the_base_digest_matches() -> None:
+    entry = {"set": "all", "check": "decisions", "decision": "docs/decisions/0009-x.md"}
+    assert gate(_versioned("new"), _versioned("old"), [entry | {"base_digest": "old"}]) == ()

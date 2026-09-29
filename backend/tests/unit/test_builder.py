@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from arena_wizard.domain.cards import Card, Color, Rarity
-from arena_wizard.domain.decks import ScoredDeck
+from arena_wizard.domain.decks import ScoredDeck, ValueBasis
 from arena_wizard.domain.stats import CardCounts, PairCounts, Snapshot, SourceRef
 from arena_wizard.engine import builder
 from arena_wizard.engine.bombs import CuratedBomb
@@ -23,9 +23,11 @@ from arena_wizard.engine.builder import (
     build_decks,
     build_for_pair,
     pair_code,
+    prepare_event_inputs,
     prepare_inputs,
     score_spells,
 )
+from arena_wizard.engine.grades import GradeScores
 from arena_wizard.engine.mana import can_cast, castable_cost
 from arena_wizard.engine.roles import Role, classify
 from arena_wizard.engine.values import PairValue
@@ -360,3 +362,38 @@ def test_with_statistics_values_pairs_and_curated_bombs_come_from_them() -> None
     assert inputs.pairs["WU"].games == 400
     assert inputs.pairs["UB"].games == 0
     assert inputs.bombs["R Bolt"] == CONFIG.bombs.threshold
+
+
+def test_max_decks_caps_the_list_even_when_more_are_within_error() -> None:
+    pool, q = three_pair_pool()
+    inputs = make_inputs(pool, q, se=5.0)
+    assert len(build_decks(pool, inputs).decks) > 2
+    capped = build_decks(pool, dataclasses.replace(inputs, max_decks=2)).decks
+    assert [d.label for d in capped] == [d.label for d in build_decks(pool, inputs).decks[:2]]
+    assert capped[-1].gap_to_next is None
+
+
+def test_event_inputs_value_every_pool_card_from_grades_with_curated_bombs_only() -> None:
+    pool, _ = three_pair_pool()
+    names = [e.card.front_name for e in pool.entries]
+    grades = GradeScores(
+        z={n: (i % 5 - 2) / 2 for i, n in enumerate(names)},
+        rarity_z={},
+        raw={n: (("Reviewer", "B"),) for n in names},
+        labels=("Reviewer",),
+    )
+    curated = (CuratedBomb("R Bolt", "add", "", "the group"),)
+    inputs = prepare_event_inputs(pool, grades, None, None, CONFIG, curated)
+    assert set(inputs.values) == set(names)
+    assert all(v.basis is ValueBasis.GRADES for v in inputs.values.values())
+    assert set(inputs.bombs) == {"R Bolt"}
+    assert all(p.games == 0 and p.points == 0.0 for p in inputs.pairs.values())
+    assert inputs.max_decks == CONFIG.event.max_decks
+    decks = build_decks(pool, inputs).decks
+    assert 0 < len(decks) <= CONFIG.event.max_decks
+
+
+def test_event_inputs_need_grades_or_data() -> None:
+    pool, _ = three_pair_pool()
+    with pytest.raises(ValueError, match="grades or at least one data layer"):
+        prepare_event_inputs(pool, None, None, None, CONFIG)

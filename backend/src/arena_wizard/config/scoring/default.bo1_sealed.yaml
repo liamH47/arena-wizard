@@ -48,3 +48,24 @@ castability:
   baseline_sources: 8   # what an ordinary 9/8 two-color deck has for each color
   deck_size: 40
   scale: 10             # points per unit of lost cast probability
+
+# Event mode: values when the public Sealed file is absent or embargoed (decision 0007).
+# The grade numbers are uncalibrated defaults, printed as assumed: the owner has not yet
+# decided whether a private expert-mode evaluation may fit them. The sealed-analyst
+# conceded slope 2.0 and sigma 3.0 (slopes 1.5 to 3.0 gave regret within 1 q on 300 sample
+# pools per set). The Premier Draft numbers and the two bonuses were measured by the
+# sealed-analyst on 2026-09-29 against the 17Lands public SOS and HOB Premier Draft and
+# Sealed game files (https://www.17lands.com/public_datasets, CC BY 4.0), pre-split
+# windows: sealed card values were 0.69 to 0.83 times draft values (correlation 0.75 and
+# 0.83), residual about 2 q net of sampling error, removal +1.2 and rare or mythic +1.0
+# beyond draft value. A committed, reproducible fit is in docs/known-broken.md.
+event:
+  center: -0.5              # a graded card at the set's average grade, vs the games-weighted mean
+  slope: 2.0                # q per standard deviation of the combined grade
+  sigma: 3.0                # a grade's error, in q
+  removal_bonus: 1.0        # sealed values removal above its draft grade or draft rate
+  rare_bonus: 1.0           # ...and rares and mythics
+  proxy_slope: 0.75         # sealed q per Premier Draft q
+  proxy_sigma: 2.0          # draft-to-sealed error per card, in q
+  min_grade_coverage: 0.8   # a grade source must grade this share of the set's spells
+  max_decks: 5              # event mode lists at most this many decks

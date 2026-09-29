@@ -65,30 +65,62 @@ def test_shrinkage_pulls_scores_but_keeps_the_order() -> None:
 
 def test_the_curated_list_parses_with_an_optional_note() -> None:
     raw = {
+        "provenance": "own",
         "curated": [
-            {"name": "A", "action": "add", "source": "LSV review", "note": "wins alone"},
-            {"name": "B", "action": "remove", "source": "Lords of Limited"},
-            {"name": "C", "action": "annotate", "source": "Limited Resources", "note": 3},
-        ]
+            {"name": "A", "action": "add", "source": "group vote", "note": "wins alone"},
+            {"name": "B", "action": "remove", "source": "Sam"},
+            {"name": "C", "action": "annotate", "source": "Alex", "note": 3},
+        ],
     }
     assert parse_curated(raw) == (
-        CuratedBomb("A", "add", "wins alone", "LSV review"),
-        CuratedBomb("B", "remove", "", "Lords of Limited"),
-        CuratedBomb("C", "annotate", "3", "Limited Resources"),
+        CuratedBomb("A", "add", "wins alone", "group vote"),
+        CuratedBomb("B", "remove", "", "Sam"),
+        CuratedBomb("C", "annotate", "3", "Alex"),
     )
+
+
+@pytest.mark.parametrize("provenance", ["own", "permission 0009"])
+def test_the_group_s_own_list_or_a_permitted_one_is_accepted(provenance: str) -> None:
+    raw = {"provenance": provenance, "curated": [{"name": "A", "action": "add", "source": "x"}]}
+    assert len(parse_curated(raw)) == 1
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {"curated": []},
+        {"provenance": "LSV", "curated": []},
+        {"provenance": "permission", "curated": []},
+        {"provenance": "own, mostly", "curated": []},
+        {"provenance": 1, "curated": []},
+        ["own"],
+    ],
+)
+def test_a_list_without_valid_provenance_is_refused(raw: Any) -> None:
+    with pytest.raises(ConfigError, match="provenance"):
+        parse_curated(raw)
 
 
 @pytest.mark.parametrize(
     ("raw", "message"),
     [
-        (None, "needs a 'curated' list"),
-        ({"curated": {"name": "A"}}, "needs a 'curated' list"),
-        ({"curated": ["A"]}, "needs a name and a cited source"),
-        ({"curated": [{"name": "A", "action": "add"}]}, "needs a name and a cited source"),
-        ({"curated": [{"action": "add", "source": "x"}]}, "needs a name and a cited source"),
-        ({"curated": [{"name": "A", "source": "x"}]}, "must be add, remove, or annotate"),
+        ({"provenance": "own"}, "needs a 'curated' list"),
+        ({"provenance": "own", "curated": {"name": "A"}}, "needs a 'curated' list"),
+        ({"provenance": "own", "curated": ["A"]}, "needs a name and a cited source"),
         (
-            {"curated": [{"name": "A", "action": "promote", "source": "x"}]},
+            {"provenance": "own", "curated": [{"name": "A", "action": "add"}]},
+            "needs a name and a cited source",
+        ),
+        (
+            {"provenance": "own", "curated": [{"action": "add", "source": "x"}]},
+            "needs a name and a cited source",
+        ),
+        (
+            {"provenance": "own", "curated": [{"name": "A", "source": "x"}]},
+            "must be add, remove, or annotate",
+        ),
+        (
+            {"provenance": "own", "curated": [{"name": "A", "action": "promote", "source": "x"}]},
             "must be add, remove, or annotate",
         ),
     ],
@@ -104,7 +136,8 @@ def test_a_set_without_a_curated_file_has_an_empty_list() -> None:
 
 def test_a_curated_list_is_read_from_its_directory_by_upper_case_set_code(tmp_path: Path) -> None:
     (tmp_path / "SOS.yaml").write_text(
-        "curated:\n  - name: Made-up Dragon\n    action: add\n    note: wins alone\n"
+        "provenance: own\ncurated:\n  - name: Made-up Dragon\n    action: add\n"
+        "    note: wins alone\n"
         "    source: a set review\n",
         encoding="utf-8",
     )
@@ -135,3 +168,8 @@ def test_curated_entries_add_remove_and_annotate() -> None:
         "Unscored": 2.0,
         "Noted": 2.2,
     }
+
+
+def test_without_not_seen_games_there_are_no_automatic_bombs() -> None:
+    no_gns = FormatMeans(gih=0.5, gih_by_rarity={C: 0.5}, gns_by_rarity={}, iwd=None, pair=None)
+    assert bomb_scores(THREE, RARITIES, no_gns, RULES, 10, 10) == {}

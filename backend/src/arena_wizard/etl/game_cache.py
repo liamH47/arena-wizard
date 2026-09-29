@@ -17,26 +17,35 @@ import gzip
 import hashlib
 import io
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 from arena_wizard.domain.sets import EventType
 from arena_wizard.domain.stats import CardCounts, PairCounts
+from arena_wizard.etl.cache_paths import cache_dir, counts_path, file_path
 from arena_wizard.etl.games import COUNTS_VERSION, DailyCounts, count_daily, read_games
 from arena_wizard.fileio import atomic_write_bytes, atomic_write_text
 from arena_wizard.sources.http import SourceContext, SourceError
 from arena_wizard.sources.seventeenlands_files import public_file_url
 
+__all__ = [
+    "CACHE_FORMAT",
+    "CachedCounts",
+    "LoadStatus",
+    "cache_dir",
+    "count_bytes",
+    "counts_from_json",
+    "counts_path",
+    "counts_to_json",
+    "download",
+    "file_path",
+    "load_file",
+    "read_cached",
+]
+
 CACHE_FORMAT = 2
 LoadStatus = Literal["downloaded", "recounted", "unchanged"]
-
-
-def cache_dir() -> Path:
-    """Where downloaded files and counts are kept."""
-    configured = os.environ.get("ARENA_WIZARD_CACHE_DIR")
-    return Path(configured) if configured else Path.home() / ".cache" / "arena-wizard"
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,16 +122,6 @@ def counts_from_json(text: str) -> CachedCounts | None:
         counts_version=document["counts_version"],
         daily=DailyCounts(names=tuple(document["names"]), cards=cards, pairs=pairs),
     )
-
-
-def counts_path(root: Path, set_code: str, event_type: EventType) -> Path:
-    """Where the counts for one file are cached."""
-    return root / "17lands" / f"{set_code}.{event_type.value}.counts.json"
-
-
-def file_path(root: Path, set_code: str, event_type: EventType) -> Path:
-    """Where the downloaded file itself is cached."""
-    return root / "17lands" / f"game_data_public.{set_code}.{event_type.value}.csv.gz"
 
 
 def download(ctx: SourceContext, url: str) -> tuple[bytes, str | None]:

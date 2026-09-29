@@ -11,7 +11,7 @@
  ],
  "report_format": 2,
  "scoring_config": {
-  "sha256": "5cc6a6de065168f524c3b45371d2c4a88b8ca96803de97a45568fc61489ed5ec",
+  "sha256": "21804285f908e6b32803a45c45f6d2aa82fe469c06a81a9603c8fb31026a1a84",
   "version": "0.3"
  },
  "sets": {
@@ -970,6 +970,22 @@
       "most_playables_only": 7,
       "pools": 63
      }
+    },
+    "data_free_flips_vs_engine": {
+     "baseline_only": 84,
+     "engine_only": 151
+    },
+    "data_free_pair_agreement_at_1": {
+     "high": 0.361,
+     "low": 0.2819,
+     "n": 531,
+     "value": 0.3202
+    },
+    "data_free_pair_agreement_at_3": {
+     "high": 0.6745,
+     "low": 0.5929,
+     "n": 531,
+     "value": 0.6347
     },
     "deck_overlap_at_pair": {
      "high": 0.6559,
@@ -6116,6 +6132,22 @@
       "most_playables_only": 10,
       "pools": 31
      }
+    },
+    "data_free_flips_vs_engine": {
+     "baseline_only": 63,
+     "engine_only": 18
+    },
+    "data_free_pair_agreement_at_1": {
+     "high": 0.9722,
+     "low": 0.9386,
+     "n": 555,
+     "value": 0.9586
+    },
+    "data_free_pair_agreement_at_3": {
+     "high": 0.999,
+     "low": 0.987,
+     "n": 555,
+     "value": 0.9964
     },
     "deck_overlap_at_pair": {
      "high": 0.5185,

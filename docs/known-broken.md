@@ -26,5 +26,18 @@ same change that fixes it.
   the same spells under different second colors at rank 3 or lower.
 - **The within-pool switch cannot be measured on SOS** (10 eligible pools after the split)
   and is confounded by build order on HOB. Reported, never gated.
+- **The Premier Draft proxy numbers are a scratch measurement.** Slope 0.75, error 2.0,
+  and the removal and rarity bonuses came from the sealed-analyst's scripts on the public
+  SOS and HOB files (decision 0007), not from committed code. Closes when an
+  `eval proxy-fit` command reproduces them from pinned public files.
+- **Grade-to-value numbers are uncalibrated defaults** (slope 2.0, error 3.0). Builds say
+  so. Closes when the owner decides the escalation in decision 0007 and a private
+  expert-mode evaluation fits them.
+- **Correlated reviewer error is not in the gap uncertainty.** Reviewer bias shared across
+  a color or archetype makes grades-only gaps less certain than printed. The text says
+  "grade error only".
+- **Rarity is per printing.** A card whose printings differ in rarity (Gardenize: rare as
+  #103, mythic as #406) gets a slightly different rarity adjustment depending on which
+  printing was opened.
 - **The FastAPI test client emits a Starlette deprecation warning** asking for `httpx2`.
   Harmless today; revisit when upgrading Starlette.

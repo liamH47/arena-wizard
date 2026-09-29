@@ -16,6 +16,9 @@ Absolute, on every set:
 
 Against the base, per set: the evaluation data is unchanged, no metric the base had is
 missing, and agreement at 1 and at 3 does not lose a net 300 bp of pools (paired flips).
+Across the report (decision 0007): when the engine version and the scoring config's hash
+are both unchanged, every pool's top deck must be too, so a decision can only change
+alongside a reviewed engine or config change.
 
 An exception needs an entry in `eval/accepted.json` naming the set, the check, its
 decision record, and the base report's decision digest, so it expires as soon as the
@@ -31,6 +34,8 @@ from typing import Any
 RATCHET_BP = 300
 SPLASH_TOLERANCE_BP = 1_000
 BOMBS_PER_POOL = (0.5, 1.5)
+ALL_SETS = "all"
+"""The set code on a failure that concerns the whole report."""
 DATA_PINS = ("sha256", "sample_sha256", "switch_sha256", "presplit_sha256", "split_day")
 
 
@@ -144,6 +149,31 @@ def _ratchet(code: str, head: Mapping[str, Any], base: Mapping[str, Any]) -> lis
     return failures
 
 
+def _decisions(head: Mapping[str, Any], base: Mapping[str, Any]) -> list[GateFailure]:
+    """Decisions may change only with the engine version or the scoring config.
+
+    Applies only when both reports record both, so a base from before they were recorded
+    is not held to it.
+    """
+    versions = (head.get("engine_version"), base.get("engine_version"))
+    configs = ((head.get("scoring_config") or {}).get("sha256"),) + (
+        (base.get("scoring_config") or {}).get("sha256"),
+    )
+    if None in versions or None in configs:
+        return []
+    unchanged = versions[0] == versions[1] and configs[0] == configs[1]
+    if unchanged and head.get("decision_digest") != base.get("decision_digest"):
+        return [
+            GateFailure(
+                ALL_SETS,
+                "decisions",
+                "decisions changed without an engine or config change: the decision digest "
+                "differs from the base while the engine version and scoring config hash match",
+            )
+        ]
+    return []
+
+
 def gate(
     head: Mapping[str, Any],
     base: Mapping[str, Any] | None,
@@ -164,6 +194,7 @@ def gate(
     for code, section in head["sets"].items():
         failures += _absolute(code, section["metrics"])
     if base is not None:
+        failures += _decisions(head, base)
         for code, section in base["sets"].items():
             if code not in head["sets"]:
                 failures.append(GateFailure(code, "set", "missing from the new report"))
