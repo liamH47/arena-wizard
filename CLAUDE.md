@@ -34,8 +34,8 @@ entry, or an `omit` entry to reach green; `floor_guard` will fail the PR.
 
 - 17Lands public files are the only automated 17Lands source until decision 0002
   records permission. Never call the 17Lands JSON endpoints before that.
-- Decision 0005 allows manual data entry from any source: a user pastes a table they
-  copied by hand. The app never fetches it itself. Each paste names its source and date,
+- Decision 0005 allows manual data entry from any source: a user uploads a file they
+  exported or pastes text they copied, by hand. The app never fetches it itself. Each paste names its source and date,
   at most one per source, set, dataset, and UTC day, and permitted automated data replaces
   it once available. Pasted data stays in the private database: never in the repo, the
   eval report, fixtures, or logs; fixtures use made-up numbers in the same layout.

@@ -14,13 +14,20 @@ players. The app is private, not sold, and not distributed.
 
 ## What is allowed
 
-A signed-in user copies a table by hand, from any source, and pastes it into the app: a
-17Lands card-data or deck-color page, another site's statistics, a published tier list, or
-the group's own ratings. The app parses the paste and uses its numbers.
+A signed-in user brings data in by hand, from any source, in either of two ways:
+
+- **Upload a file they exported,** such as the CSV from the "Download as CSV" link on
+  17Lands' card data page (the site names it `card-ratings-YYYY-MM-DD.csv`).
+- **Paste text they copied,** such as the output of that page's "Copy to clipboard"
+  option, a selected table, a tier list, or the group's own ratings.
+
+Both go through the same importer and the same limits; "paste" below means either. The app
+parses the data and uses its numbers.
 
 ## Limits, enforced in code where they can be
 
-1. **By hand only.** The app never fetches the data itself. No scripts, headless or
+1. **By hand only.** The app never fetches the data itself; a person clicks the export or
+   copies the table. No scripts, headless or
    automated browsers, scraping extensions, or calls to a source's undocumented API feed the
    paste importer. Copying and pasting is something a person does.
 2. **Every paste names its source.** The user records the source (for example "17Lands card
@@ -46,10 +53,15 @@ the group's own ratings. The app parses the paste and uses its numbers.
 ## Formats
 
 Each source layout needs a parser, and each parser is tested with made-up data in that
-layout. The first are the 17Lands card-data table and deck-color table, because they carry
-the win rates. 17Lands shows regular Sealed card win rates as zero games (measured
-2026-09-28), so the useful 17Lands pages are the card-data page for Arena Direct Sealed and
-for Premier Draft, and the deck-color page for Sealed. A generic layout (card name plus
+layout. Parsers accept comma- or tab-separated text and strip a byte-order mark (17Lands'
+CSV export starts with one). The first are the 17Lands card-data export and the deck-color
+table, because they carry the win rates. The export is not known to record which set,
+format, or date range was selected on the page, so the user picks those in the app, and the
+importer checks the card names against that set's card table.
+
+17Lands shows regular Sealed card win rates as zero games (measured 2026-09-28), so the
+useful 17Lands pages are the card-data page for Arena Direct Sealed and for Premier Draft,
+and the deck-color page for Sealed. A generic layout (card name plus
 named value columns, for tier lists and the group's own grades) follows. Screenshot import
 is built only if pasting proves impractical, and then with classical OCR, no LLM.
 
