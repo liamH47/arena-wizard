@@ -1,0 +1,50 @@
+# Default scoring for Best-of-One Sealed. Every change to this file ships with its measured
+# eval delta (backend/eval/report.md) in the same PR. See docs/plan.md section 7 and
+# docs/decisions/0006-milestone-1-panel.md.
+#
+# Units: every weight multiplies points of game-in-hand win rate (q). Across 1,403 player
+# builds, about 12 q-points move a deck's win rate by one point, so a shape weight of 0.6
+# per removal spell is worth about 0.05 win-rate points. The shape weights have not been
+# fitted yet; that is the tuning round (milestone 7).
+version: "0.3"
+
+weights:
+  card_quality: 1.0      # per point of a card's value above the format mean
+  iwd: 0.35              # improvement when drawn, inside each card's value
+  pair_strength: 0.0     # off: double-counts card quality and favors unplayed pairs (0006)
+  bomb: 1.5              # strongest bomb counts 1, the next 2/3, then 4/9, ...
+  creature_balance: 0.8  # per creature outside the window
+  removal: 0.6           # per removal spell, up to the cap
+  two_drop: 0.4          # per creature costing 2 or less, up to the cap
+  three_drop: 0.4        # per creature costing 3, up to the cap
+  top_end: 0.5           # per spell costing 5+ beyond the maximum
+  consistency: 0.7       # per point of castability shortfall
+  splash_card: 5.0       # per splashed card; measured cost of splashing, see 0006
+
+targets:
+  creatures_low: 13
+  creatures_high: 17
+  removal_cap: 5
+  two_drop_cap: 4
+  three_drop_cap: 4
+  max_five_plus: 4
+  splash_max_cards: 3
+  splash_min_sources: 3
+
+# Pseudo-games of prior, estimated by the method of moments on the full Sealed files
+# (2026-09-28): game-in-hand SOS 206, HOB 153; not-seen SOS 493, HOB 223; two-color
+# pairs SOS 461, HOB 188. Rounded to the middle of each range.
+shrinkage:
+  prior_games: 180
+  iwd_prior_games: 350
+  pair_prior_games: 300
+
+bombs:
+  min_games: 150   # game-in-hand games before a card can be an automatic bomb
+  min_cards: 50    # no automatic list for a set with fewer qualifying cards
+  threshold: 2.0   # bomb score (z of win rate in hand + z of improvement when drawn)
+
+castability:
+  baseline_sources: 8   # what an ordinary 9/8 two-color deck has for each color
+  deck_size: 40
+  scale: 10             # points per unit of lost cast probability
