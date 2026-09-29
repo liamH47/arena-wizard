@@ -21,15 +21,16 @@ TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
 """A stalled download must fail, not hold a worker forever."""
 
 DEFAULT_INTERVALS: Mapping[str, float] = {
-    # Scryfall: 2 requests per second on /cards/search, 10 per second elsewhere
-    # (https://scryfall.com/docs/api/rate-limits, checked 2026-09-28).
-    "scryfall_search": 0.5,
-    "scryfall": 0.1,
+    # Scryfall allows 2 requests per second on /cards/search and /cards/named, 10 on some
+    # other endpoints (https://scryfall.com/docs/api/rate-limits, checked 2026-09-28). One
+    # shared key at the stricter rate covers every endpoint this app calls, so interleaved
+    # searches and named lookups can never outrun either limit.
+    "scryfall": 0.5,
     "17lands": 1.0,
 }
 
 RATE_LIMITED_DELAY_SECONDS = 30.0
-"""Scryfall limits access for 30 seconds after a 429; used when Retry-After is absent."""
+"""Scryfall locks access for 30 seconds after a 429, so no back-off is ever shorter."""
 
 
 class SourceError(RuntimeError):
@@ -50,7 +51,7 @@ class Throttle:
         """Sleep until `key`'s interval has passed since its previous request, then stamp it.
 
         Args:
-            key: Which interval applies, e.g. "scryfall_search".
+            key: Which interval applies, e.g. "scryfall".
             sleep: Sleeps for the given number of seconds.
             now: Returns a monotonic time in seconds.
 
@@ -103,7 +104,7 @@ def default_context(transport: httpx.BaseTransport | None = None) -> SourceConte
 
 
 def retry_after_seconds(response: httpx.Response) -> float:
-    """Return the server's Retry-After in seconds, or the 30-second default.
+    """Return how long to wait after a 429: the server's Retry-After, never under 30 seconds.
 
     Args:
         response: A 429 response.
@@ -111,12 +112,11 @@ def retry_after_seconds(response: httpx.Response) -> float:
     Returns:
         The delay to wait before retrying.
     """
-    value = response.headers.get("Retry-After", "")
     try:
-        seconds = float(value)
+        seconds = float(response.headers.get("Retry-After", ""))
     except ValueError:
         return RATE_LIMITED_DELAY_SECONDS
-    return seconds if seconds >= 0 else RATE_LIMITED_DELAY_SECONDS
+    return max(seconds, RATE_LIMITED_DELAY_SECONDS)
 
 
 def get(

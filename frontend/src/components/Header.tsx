@@ -5,7 +5,7 @@ export default function Header() {
   return (
     <header className="border-b border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
       <p className="mx-auto max-w-3xl">
-        Card and color-pair data from{' '}
+        Card statistics and color-pair data from{' '}
         <a className="underline" href="https://www.17lands.com/public_datasets">
           17Lands
         </a>{' '}

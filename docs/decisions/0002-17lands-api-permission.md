@@ -33,18 +33,29 @@ by JavaScript.
 
 ## The request to post
 
-> Hi 17Lands team. I'm building a free, open-source tool
+Revised 2026-09-28 after the milestone-0 panel (decision 0004): the counts are now exact,
+every poll is named, and the text no longer calls the code open source, because no license
+has been chosen.
+
+> Hi 17Lands team. I'm building a free tool with public code
 > (https://github.com/liamH47/arena-wizard) that recommends Bo1 sealed decks for a small
 > private group of friends. It is calibrated on your public game datasets, credited with
-> links at the top of every page under CC BY 4.0, and never calls your site on behalf of a
-> user request: everything is mirrored on a schedule.
+> links at the top of every page under CC BY 4.0. It never calls your site on behalf of a
+> user request: everything is mirrored on a schedule, and endpoint data stays in the app's
+> private database and is never committed to the public repository.
 >
-> 1. May it poll `color_ratings/data` and `card_ratings/data` once per UTC day for up to
->    three current sets (at most 9 requests a day, User-Agent
->    `arena-wizard/0.1 (+https://github.com/liamH47/arena-wizard)`), plus
->    `card_ratings/data?format=ArenaDirect_Sealed` every 6 hours only while an Arena Direct
->    is running?
-> 2. For the new-set embargo, Reality Fracture reached Arena on 2026-09-29. We read "the
+> 1. May it make these requests, with User-Agent
+>    `arena-wizard/<version> (+https://github.com/liamH47/arena-wizard)`?
+>    - `color_ratings/data?event_type=Sealed`, once per UTC day per set, for up to three
+>      current sets: 3 requests a day.
+>    - `card_ratings/data?format=PremierDraft`, once per UTC day per set: 3 requests a day.
+>    - `card_ratings/data?format=ArenaDirect_Sealed`, every 6 hours, only for a set whose
+>      Arena Direct is running: 4 requests a day during an event, none otherwise.
+>    - One weekly check that the responses still have the shape the app expects: 3
+>      requests a week.
+>
+>    That is at most 10 requests a day, and 6 outside an Arena Direct.
+> 2. For the new-set embargo: Reality Fracture reaches Arena on 2026-09-29. We read "the
 >    12th day" as 2026-10-10. Is that right, or do you mean the second Monday, 2026-10-12?
 >
 > If the answer to the first question is no, we'll use only the public datasets. Thanks for

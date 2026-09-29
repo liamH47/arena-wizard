@@ -1,8 +1,9 @@
 # Arena Wizard
 
-Card and color-pair data from [17Lands](https://www.17lands.com/public_datasets) public game
-files, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and aggregated per
-day by Arena Wizard. Card data and images from [Scryfall](https://scryfall.com). Arena
+Card statistics and color-pair data from
+[17Lands](https://www.17lands.com/public_datasets) public game files, licensed
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and aggregated per day by Arena
+Wizard. Card data and images from [Scryfall](https://scryfall.com). Arena
 Wizard is not affiliated with or endorsed by 17Lands or Scryfall.
 
 Arena Wizard recommends decks for Magic: The Gathering Arena Best-of-One sealed. Paste your
@@ -15,10 +16,11 @@ sealed pools, the decks their owners built, and how those decks did.
 
 Under construction. `docs/roadmap.md` tracks milestones; `docs/plan.md` is the full design.
 
-## Private instance, free code
+## Private instance, public code
 
-The code in this repository is free to read and run. The deployed instance is a private
-one for a group of friends, behind Google sign-in; anyone can run their own.
+The code is public and the app is free. The deployed instance is a private one for a group
+of friends, behind Google sign-in. No license has been chosen yet, so the code is not yet
+open source in the legal sense.
 
 ## Development
 

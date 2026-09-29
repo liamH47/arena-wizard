@@ -11,8 +11,11 @@ say plainly that you could not confirm it.
 ## Standing knowledge (last verified 2026-09-28)
 
 - **API.** `https://api.scryfall.com/cards/search?q=...&unique=prints` and
-  `/cards/named?exact=...`. Send a User-Agent and `Accept: application/json`; space
-  searches half a second apart.
+  `/cards/named?exact=...`. Send a User-Agent and `Accept: application/json`; space every
+  request half a second apart (both endpoints are limited to 2 per second).
+- **Scryfall's Arena tag can lag.** FRA 35 Plan for All Outcomes had no Arena print on
+  2026-09-28 although it is a normal main-set card; check such cards against the 17Lands
+  header once one exists.
 - **Set codes per set.** SOS pools carry SOS, SOA (Mystical Archive), and SPG (Special
   Guests 149 to 158a). HOB pools carry only HOB; Hobbit Eternal (HOC) cards are on Arena
   but not in HOB packs. FRA pools carry FRA and SPG 159 to 168. Special Guests prints carry

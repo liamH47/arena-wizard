@@ -45,7 +45,6 @@ python_version = "3.13"
 # No coverage gate here: a --cov-fail-under in addopts fires on every single-file run.
 # The gate lives in CI and the verify skill, read from coverage_floor.txt.
 testpaths = ["tests"]
-markers = ["postgres: needs a real PostgreSQL server (forced in CI)"]
 
 [tool.coverage.run]
 branch = true

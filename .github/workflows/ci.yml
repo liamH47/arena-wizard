@@ -83,6 +83,9 @@ jobs:
 
       - name: Refuse a lower floor, new pragmas, or new exclusions
         working-directory: backend
+        env:
+          # Compare with the branch this PR targets; pushes to main compare with main.
+          FLOOR_GUARD_BASE: origin/${{ github.base_ref || 'main' }}
         run: uv run python -m arena_wizard.devtools.floor_guard
 
   frontend:

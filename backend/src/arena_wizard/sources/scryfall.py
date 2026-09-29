@@ -32,7 +32,7 @@ def fetch_search(ctx: SourceContext, query: str) -> list[dict[str, Any]]:
         SourceError: Any other non-200 status, or a response without the expected shape.
     """
     params = {"q": f"{query} game:arena", "unique": "prints", "order": "set"}
-    response = get(ctx, SEARCH_URL, key="scryfall_search", params=params)
+    response = get(ctx, SEARCH_URL, key="scryfall", params=params)
     if response.status_code == 404:
         return []
     cards: list[dict[str, Any]] = []
@@ -43,11 +43,18 @@ def fetch_search(ctx: SourceContext, query: str) -> list[dict[str, Any]]:
         try:
             cards.extend(body["data"])
             if not body["has_more"]:
-                return cards
+                expected = body["total_cards"]
+                break
             next_page = body["next_page"]
         except KeyError as exc:
             raise SourceError(f"Scryfall search {query!r} response lacks {exc}") from exc
-        response = get(ctx, next_page, key="scryfall_search")
+        response = get(ctx, next_page, key="scryfall")
+    # A result set that changed between pages would silently drop or repeat a card.
+    if len(cards) != expected:
+        raise SourceError(
+            f"Scryfall search {query!r} returned {len(cards)} cards but reported {expected}"
+        )
+    return cards
 
 
 def fetch_oracle_id(ctx: SourceContext, name: str) -> str | None:
@@ -91,6 +98,11 @@ def _face(raw: Mapping[str, Any]) -> CardFace:
     )
 
 
+def _without_query(url: str | None) -> str | None:
+    """Drop Scryfall's cache-busting timestamp so a rescan does not rewrite the tables."""
+    return None if url is None else url.split("?", 1)[0]
+
+
 def compute_card(raw: Mapping[str, Any]) -> Card:
     """Trim a raw Scryfall card object to a Card. Pure.
 
@@ -131,7 +143,7 @@ def compute_card(raw: Mapping[str, Any]) -> Card:
         color_identity=_colors(raw.get("color_identity", [])),
         produced_mana=tuple(raw.get("produced_mana", [])),
         faces=faces,
-        image_uri=image_uris.get("normal"),
+        image_uri=_without_query(image_uris.get("normal")),
         artist=raw.get("artist") or front.get("artist"),
         released_at=raw["released_at"],
     )

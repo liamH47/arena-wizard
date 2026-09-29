@@ -13,6 +13,7 @@ from arena_wizard.catalog import unresolved_names
 from arena_wizard.cli import SyncCardsCommand, run
 from arena_wizard.domain.sets import EventType, SetConfig, parse_set_config
 from arena_wizard.etl.sync_cards import compute_card_table, fetch_card_sources
+from arena_wizard.sources.http import SourceError
 from arena_wizard.sources.scryfall import NAMED_URL, SEARCH_URL
 from arena_wizard.sources.seventeenlands_files import public_file_url
 from tests.conftest import ChunkedBody, FakeClock, gzip_csv, make_context
@@ -55,7 +56,8 @@ class FakeWorld:
             cards = self.searches.get(request.url.params["q"])
             if cards is None:
                 return httpx.Response(404, json={"object": "error"})
-            return httpx.Response(200, json={"object": "list", "data": cards, "has_more": False})
+            body = {"object": "list", "data": cards, "has_more": False, "total_cards": len(cards)}
+            return httpx.Response(200, json=body)
         if url.startswith(NAMED_URL):
             oracle_id = self.oracle_ids.get(request.url.params["exact"])
             if oracle_id is None:
@@ -63,8 +65,8 @@ class FakeWorld:
             return httpx.Response(200, json={"oracle_id": oracle_id})
         for event_type, names in self.headers.items():
             if url == public_file_url("SOS", event_type):
-                body = gzip_csv([_header_line(names), "SOS,True"])
-                return httpx.Response(200, stream=ChunkedBody(body))
+                data = gzip_csv([_header_line(names), "SOS,True"])
+                return httpx.Response(200, stream=ChunkedBody(data))
         return httpx.Response(403)
 
     def named_lookups(self) -> list[str]:
@@ -157,6 +159,18 @@ def test_syncing_twice_rewrites_nothing_and_a_source_change_rewrites_the_table(
     assert "Errata" in path.read_text(encoding="utf-8")
     assert lines[-1].endswith("written")
 
+    # A printing Scryfall no longer returns must disappear, which an upsert would miss.
+    prepare = world.searches["set:sos game:arena"][1]
+    prepare_id = prepare["id"]
+    world.searches["set:sos game:arena"] = [
+        c for c in world.searches["set:sos game:arena"] if c["id"] != prepare_id
+    ]
+    world.headers[EventType.SEALED].remove(prepare["card_faces"][0]["name"])
+    assert run(command, ctx, load_config=lambda code: _config(), echo=lines.append) == 0
+    assert prepare_id not in path.read_text(encoding="utf-8")
+    assert "3 printings" in lines[-1]
+    assert not list(tmp_path.glob("*.tmp"))
+
 
 def test_unresolved_header_names_fail_the_command_and_are_named(
     world: FakeWorld, clock: FakeClock, tmp_path: Path
@@ -184,3 +198,24 @@ def test_a_set_with_no_file_yet_says_so(world: FakeWorld, clock: FakeClock, tmp_
         echo=lines.append,
     )
     assert "header: no 17Lands file yet" in lines[0]
+
+
+def test_a_configured_query_that_matches_nothing_fails_instead_of_shrinking_the_table(
+    world: FakeWorld, clock: FakeClock
+) -> None:
+    del world.searches["set:sos game:arena"]
+    with pytest.raises(SourceError, match="'set:sos' matched no cards"):
+        fetch_card_sources(make_context(world.handle, clock), _config())
+
+
+def test_a_name_lookup_keeps_only_printings_this_sets_packs_can_carry(
+    world: FakeWorld, clock: FakeClock, scryfall_cards: dict[str, dict[str, Any]]
+) -> None:
+    guest = scryfall_cards["special_guest"]
+    reprint = {**copy.deepcopy(guest), "id": "reprint-id", "set": "zzz", "collector_number": "7"}
+    world.searches[f"oracleid:{guest['oracle_id']} game:arena"] = [guest, reprint]
+    table = compute_card_table(
+        _config(), fetch_card_sources(make_context(world.handle, clock), _config())
+    )
+    assert "reprint-id" not in {card.scryfall_id for card in table.cards}
+    assert unresolved_names(table) == ()

@@ -15,7 +15,7 @@ from typing import Any
 from arena_wizard.catalog import CardTable, HeaderInfo
 from arena_wizard.domain.sets import EventType, SetConfig
 from arena_wizard.sources import scryfall, seventeenlands_files
-from arena_wizard.sources.http import SourceContext
+from arena_wizard.sources.http import SourceContext, SourceError
 
 HEADER_EVENT_TYPES: tuple[EventType, ...] = (EventType.SEALED, EventType.PREMIER_DRAFT)
 """Which 17Lands files to take the header from, in order of preference."""
@@ -80,14 +80,25 @@ def fetch_card_sources(ctx: SourceContext, config: SetConfig) -> CardSources:
 
     Returns:
         The raw cards from each query plus those found by header name, and the header.
+
+    Raises:
+        SourceError: A configured query matched nothing, which means the query or the set
+            config is wrong; a silently smaller table would be worse.
     """
     raw_cards: list[Mapping[str, Any]] = []
     for query in config.scryfall_queries:
-        raw_cards.extend(scryfall.fetch_search(ctx, query))
+        found = scryfall.fetch_search(ctx, query)
+        if not found:
+            raise SourceError(f"{config.code}: configured query {query!r} matched no cards")
+        raw_cards.extend(found)
     header = fetch_header(ctx, config)
     if header is not None:
+        allowed = {code.lower() for code in config.card_set_codes}
         for name in _missing_names(raw_cards, header.names):
             oracle_id = scryfall.fetch_oracle_id(ctx, name)
             if oracle_id is not None:
-                raw_cards.extend(scryfall.fetch_search(ctx, f"oracleid:{oracle_id}"))
+                # Only printings this set's packs can carry; a later reprint of the same
+                # card elsewhere must not leak into an older set's table.
+                prints = scryfall.fetch_search(ctx, f"oracleid:{oracle_id}")
+                raw_cards.extend(raw for raw in prints if raw["set"] in allowed)
     return CardSources(raw_cards=tuple(raw_cards), header=header)

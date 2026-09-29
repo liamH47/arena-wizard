@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from itertools import pairwise
+
 import httpx
 import pytest
 
 from arena_wizard.sources.http import (
+    DEFAULT_INTERVALS,
     RATE_LIMITED_DELAY_SECONDS,
     USER_AGENT,
     SourceError,
@@ -12,20 +15,30 @@ from arena_wizard.sources.http import (
     get,
     retry_after_seconds,
 )
-from tests.conftest import FakeClock, make_context
+from tests.conftest import FakeClock, Handler, make_context
 
 
-def test_first_request_on_a_key_does_not_wait(clock: FakeClock) -> None:
-    Throttle({"scryfall": 0.1}).wait("scryfall", clock.sleep, clock.now)
-    assert clock.sleeps == []
+def _recording_handler(
+    clock: FakeClock, sent_at: list[float], responses: list[httpx.Response] | None = None
+) -> Handler:
+    """A handler that stamps each request with the fake clock's time when it is sent."""
+    queue = list(responses or [])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent_at.append(clock.now())
+        return queue.pop(0) if queue else httpx.Response(200)
+
+    return handler
 
 
-def test_back_to_back_requests_wait_out_the_remaining_interval(clock: FakeClock) -> None:
-    throttle = Throttle({"scryfall_search": 0.5})
-    throttle.wait("scryfall_search", clock.sleep, clock.now)
-    clock.time += 0.2
-    throttle.wait("scryfall_search", clock.sleep, clock.now)
-    assert clock.sleeps == [pytest.approx(0.3)]
+def test_requests_on_one_key_are_sent_at_least_an_interval_apart(clock: FakeClock) -> None:
+    sent_at: list[float] = []
+    ctx = make_context(_recording_handler(clock, sent_at), clock)
+    for elapsed in (0.0, 0.2, 0.1, 0.7, 0.0):
+        clock.time += elapsed  # time the caller spends between requests
+        get(ctx, "https://api.scryfall.com/x", key="scryfall")
+    assert len(sent_at) == 5
+    assert all(later - earlier >= 0.5 for earlier, later in pairwise(sent_at))
 
 
 def test_a_request_after_the_interval_has_passed_does_not_wait(clock: FakeClock) -> None:
@@ -41,6 +54,10 @@ def test_keys_are_spaced_independently(clock: FakeClock) -> None:
     throttle.wait("a", clock.sleep, clock.now)
     throttle.wait("b", clock.sleep, clock.now)
     assert clock.sleeps == []
+
+
+def test_every_scryfall_endpoint_shares_the_two_per_second_limit() -> None:
+    assert DEFAULT_INTERVALS["scryfall"] == 0.5
 
 
 def test_an_unconfigured_key_is_an_error_not_an_unthrottled_request(clock: FakeClock) -> None:
@@ -65,11 +82,18 @@ def test_non_429_statuses_are_returned_for_the_caller_to_judge(clock: FakeClock)
     assert get(ctx, "https://api.scryfall.com/x", key="scryfall").status_code == 404
 
 
-def test_a_429_waits_for_retry_after_then_succeeds(clock: FakeClock) -> None:
-    responses = iter([httpx.Response(429, headers={"Retry-After": "7"}), httpx.Response(200)])
-    ctx = make_context(lambda request: next(responses), clock)
+def test_every_retry_after_a_429_waits_out_the_lockout_first(clock: FakeClock) -> None:
+    sent_at: list[float] = []
+    responses = [
+        httpx.Response(429, headers={"Retry-After": "45"}),
+        httpx.Response(429),
+        httpx.Response(200),
+    ]
+    ctx = make_context(_recording_handler(clock, sent_at, responses), clock)
     assert get(ctx, "https://api.scryfall.com/x", key="scryfall").status_code == 200
-    assert 7.0 in clock.sleeps
+    gaps = [later - earlier for earlier, later in pairwise(sent_at)]
+    assert gaps[0] >= 45.0
+    assert gaps[1] >= RATE_LIMITED_DELAY_SECONDS
 
 
 def test_rate_limited_on_every_attempt_raises_instead_of_looping(clock: FakeClock) -> None:
@@ -87,13 +111,14 @@ def test_rate_limited_on_every_attempt_raises_instead_of_looping(clock: FakeCloc
 @pytest.mark.parametrize(
     ("header", "expected"),
     [
-        ({"Retry-After": "12"}, 12.0),
+        ({"Retry-After": "45"}, 45.0),
+        ({"Retry-After": "1"}, RATE_LIMITED_DELAY_SECONDS),
         ({}, RATE_LIMITED_DELAY_SECONDS),
         ({"Retry-After": "soon"}, RATE_LIMITED_DELAY_SECONDS),
         ({"Retry-After": "-5"}, RATE_LIMITED_DELAY_SECONDS),
     ],
 )
-def test_retry_after_falls_back_to_thirty_seconds_when_absent_or_invalid(
+def test_a_429_never_waits_less_than_the_thirty_second_lockout(
     header: dict[str, str], expected: float
 ) -> None:
     assert retry_after_seconds(httpx.Response(429, headers=header)) == expected

@@ -105,3 +105,17 @@ def test_a_packaged_table_loads_and_a_missing_one_is_an_error() -> None:
     assert load_packaged_card_table("sos").set_code == "SOS"
     with pytest.raises(FileNotFoundError, match="XYZ"):
         load_packaged_card_table("XYZ")
+
+
+def test_a_file_cut_off_inside_a_multibyte_character_is_rewritten_not_a_crash(
+    tmp_path: Path, scryfall_cards: dict[str, dict[str, Any]]
+) -> None:
+    path = tmp_path / "SOS.json"
+    table = _table(scryfall_cards, HeaderInfo(EventType.SEALED, ("Dáin",)))
+    write_card_table(table, path)
+    data = path.read_bytes()
+    cut = data.index("á".encode()) + 1
+    path.write_bytes(data[:cut])
+    assert write_card_table(table, path) is True
+    assert path.read_bytes() == data
+    assert not list(tmp_path.glob("*.tmp"))

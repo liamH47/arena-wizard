@@ -11,7 +11,13 @@ export default function Footer() {
           . Not approved/endorsed by Wizards. Portions of the materials used are property of
           Wizards of the Coast. ©Wizards of the Coast LLC.
         </p>
-        <p>Not affiliated with or endorsed by 17Lands.</p>
+        <p>
+          Card data and images from{' '}
+          <a className="underline" href="https://scryfall.com">
+            Scryfall
+          </a>
+          . Not affiliated with or endorsed by 17Lands or Scryfall.
+        </p>
       </div>
     </footer>
   )

@@ -7,7 +7,7 @@ decisions so they are not re-litigated.
 
 | # | Milestone | Status |
 |---|---|---|
-| 0 | Bootstrap: tooling, CI, verify skill, agents, decision log, card tables | in review |
+| 0 | Bootstrap: tooling, CI, verify skill, agents, decision log, card tables | in review (PR #1) |
 | 1 | CLI slice with the evaluation harness | next |
 | 2 | FRA event mode (expert ratings, curated bombs, embargo) | planned |
 | 3 | Web app and deploy | planned |
@@ -23,6 +23,10 @@ decisions so they are not re-litigated.
 - Write `config/bombs/SOS.yaml` and `HOB.yaml` with the friends, from set reviews with
   citations, before seeing the automatic list.
 - Check whether the Arena phone client can export a Limited-event deck.
+- Choose a license (decision 0004); the permission request no longer calls the code open
+  source until one exists.
+- Make "Backend", "Coverage ratchet", and "Frontend" required status checks on `main` in
+  the GitHub branch settings, so a failing ratchet actually blocks a merge.
 
 ## Decisions already made
 
@@ -39,6 +43,9 @@ Recorded so they are not re-litigated:
 - **Committed card tables, Special Guests selected by date, no `arena_id` dependency** —
   decision 0003; `tests/golden/test_packaged_card_tables.py` enforces it.
 - **Coverage gate in CI and verify, never in pytest addopts; floor only rises** —
-  `arena_wizard.devtools.floor_guard` enforces it.
+  `arena_wizard.devtools.floor_guard` enforces it, including pragma spellings, shadowing
+  config files, and the CI command itself (decision 0004).
+- **Every Scryfall call shares one 0.5-second spacing, and a 429 never backs off for less
+  than 30 seconds** — decision 0004; `tests/unit/test_http.py` enforces it.
 - **Every date window uses the Arena release date** — about half of each set's 17Lands
   games predate the paper release.

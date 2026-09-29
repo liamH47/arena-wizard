@@ -9,6 +9,7 @@ shows up as a readable diff.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -197,11 +198,16 @@ def write_card_table(table: CardTable, path: Path) -> bool:
     Returns:
         True when the file was created or changed; False when it already matched.
     """
-    text = table_to_json(table)
-    if path.is_file() and path.read_text(encoding="utf-8") == text:
+    data = table_to_json(table).encode("utf-8")
+    # Compare bytes, not decoded text: a file cut off inside a multibyte character must be
+    # rewritten, not crash the next sync.
+    if path.is_file() and path.read_bytes() == data:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8", newline="\n")
+    # Write beside the target, then swap, so an interrupted run never leaves a partial file.
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_bytes(data)
+    os.replace(temporary, path)
     return True
 
 

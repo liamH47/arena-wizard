@@ -24,8 +24,10 @@ actually run, showing the arithmetic.
   12th day on Arena. `SetConfig.embargo_until` is release plus 11 days (FRA: 2026-10-10).
 - **17Lands attribution:** visible at the top level with links, never only in a footnote;
   never imply endorsement.
-- **Scryfall:** `/cards/search` 2 per second, other endpoints 10 per second, a 429 limits
-  access for 30 seconds, User-Agent and Accept headers are mandatory. Production never
+- **Scryfall:** `/cards/search`, `/cards/named`, `/cards/random`, and `/cards/collection` 2
+  per second, some other endpoints 10 per second; a 429 locks access for 30 seconds, so the
+  client never backs off for less; User-Agent and Accept headers are mandatory. The app
+  uses one 0.5-second key for every Scryfall call. Production never
   calls Scryfall; `sync-cards` is developer-run. Images are hotlinked, uncropped,
   unaltered.
 - **Fan Content Policy notice,** verbatim: "Arena Wizard is unofficial Fan Content permitted

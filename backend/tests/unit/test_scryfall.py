@@ -33,7 +33,8 @@ def test_a_normal_card_keeps_its_printed_characteristics(
     assert card.power == raw["power"]
     assert card.faces == ()
     assert card.arena_id == raw["arena_id"]
-    assert card.image_uri == raw["image_uris"]["normal"]
+    assert "?" in raw["image_uris"]["normal"]
+    assert card.image_uri == raw["image_uris"]["normal"].split("?")[0]
     assert not card.is_basic
 
 
@@ -60,7 +61,7 @@ def test_a_transform_card_rebuilds_fields_scryfall_only_puts_on_its_faces(
     assert card.mana_cost == f"{front['mana_cost']} // {back['mana_cost']}"
     assert card.oracle_text == f"{front['oracle_text']}\n//\n{back['oracle_text']}"
     assert card.colors == sort_colors([Color(c) for c in front["colors"] + back["colors"]])
-    assert card.image_uri == front["image_uris"]["normal"]
+    assert card.image_uri == front["image_uris"]["normal"].split("?")[0]
     assert card.power == front["power"]
 
 
@@ -97,8 +98,13 @@ def test_sort_colors_dedupes_and_orders_wubrg() -> None:
 # --- fetch_search: pagination and failure handling ---------------------------------------
 
 
-def _page(cards: list[dict[str, Any]], next_page: str | None) -> httpx.Response:
-    body: dict[str, Any] = {"object": "list", "data": cards, "has_more": next_page is not None}
+def _page(cards: list[dict[str, Any]], next_page: str | None, total: int = 3) -> httpx.Response:
+    body: dict[str, Any] = {
+        "object": "list",
+        "data": cards,
+        "has_more": next_page is not None,
+        "total_cards": total,
+    }
     if next_page is not None:
         body["next_page"] = next_page
     return httpx.Response(200, json=body)
@@ -120,6 +126,16 @@ def test_search_follows_every_page_and_restricts_to_arena(clock: FakeClock) -> N
     assert first["q"] == ["set:sos game:arena"]
     assert first["unique"] == ["prints"]
     assert clock.sleeps == [pytest.approx(0.5)]
+
+
+def test_a_result_set_that_changed_between_pages_is_an_error(clock: FakeClock) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "page=2" in str(request.url):
+            return _page([{"id": "c"}], None, total=4)
+        return _page([{"id": "a"}, {"id": "b"}], f"{SEARCH_URL}?page=2", total=4)
+
+    with pytest.raises(SourceError, match="returned 3 cards but reported 4"):
+        fetch_search(make_context(handler, clock), "set:sos")
 
 
 def test_a_query_matching_nothing_is_an_empty_list(clock: FakeClock) -> None:
