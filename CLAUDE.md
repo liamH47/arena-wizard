@@ -43,6 +43,12 @@ entry, or an `omit` entry to reach green; `floor_guard` will fail the PR.
   it once available. Pasted data stays in the private database: never in the repo, the
   eval report, fixtures, or logs; fixtures use made-up numbers in the same layout.
 - Respect `SetConfig.embargo_until` for everything except data a user pasted in.
+- In the CLI, pastes live in the private data directory (`ARENA_WIZARD_DATA_DIR`, never
+  inside a git work tree), keyed by set, dataset, event type, registered source id, and
+  UTC import day (decision 0007). Store functions take the directory as a required
+  argument, and only `cli.main` resolves it.
+- Never commit third-party grades. A committed ratings or bombs file is the group's own
+  (`provenance: own`) or cites a permission decision (decision 0007).
 - Attribution stays at the top of every page and the top of the README.
 - Production never calls Scryfall; card tables are regenerated with
   `uv run arena-wizard sync-cards` and reviewed as a diff.

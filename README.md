@@ -27,7 +27,9 @@ can run their own.
 The MIT License covers the code written for this project, nothing else. Card names, rules
 text, and images are the property of Wizards of the Coast. The card tables under
 `backend/src/arena_wizard/data/cards/` are derived from Scryfall's data. Anything derived
-from 17Lands game files remains under CC BY 4.0 with its attribution.
+from 17Lands game files remains under CC BY 4.0 with its attribution. Expert grades and
+17Lands card data that a user pastes in by hand stay in that user's private data directory
+and are never part of this repository.
 
 ## Development
 
@@ -46,6 +48,9 @@ npm run dev
 ```
 
 The full check suite, identical to CI, is in `.claude/skills/verify/SKILL.md`.
+
+Building decks during an event, before the 17Lands public file exists:
+`docs/runbooks/event-night.md`.
 
 Regenerating a set's card table from Scryfall (developer-run, never in production):
 

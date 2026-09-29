@@ -8,8 +8,8 @@ decisions so they are not re-litigated.
 | # | Milestone | Status |
 |---|---|---|
 | 0 | Bootstrap: tooling, CI, verify skill, agents, decision log, card tables | done |
-| 1 | CLI slice with the evaluation harness | in review |
-| 2 | FRA event mode (expert ratings, curated bombs, embargo, manual data entry) | planned |
+| 1 | CLI slice with the evaluation harness | done |
+| 2 | FRA event mode (pasted grades and card data, Bayesian chain, curated bombs) | in review |
 | 3 | Web app and deploy | planned |
 | 4 | Refresh, keep-warm, observability | planned |
 | 5 | Trends and bombs pages | planned |
@@ -17,6 +17,15 @@ decisions so they are not re-litigated.
 | 7 | Tuning round | planned |
 
 ## Owner actions outstanding
+
+- **Before the FRA Arena Direct:** follow `docs/runbooks/event-night.md`.
+  - Paste FRA Premier Draft card data daily from 2026-10-01.
+  - Paste grades.
+  - Write `config/bombs/FRA.yaml` with the friends, `provenance: own`.
+- **Decide the escalation in decision 0007:** may a private expert-mode evaluation run the
+  eval harness on pasted SOS and HOB grades, committing only two fitted numbers?
+- **Ask Limited Level-Ups** for their pre-release SOS and HOB lists, and for permission to
+  commit them.
 
 - Post the 17Lands permission request in `docs/decisions/0002-17lands-api-permission.md`
   and record the reply.
@@ -63,3 +72,12 @@ Recorded so they are not re-litigated:
   absent** — decision 0006; `tests/unit/test_commands.py`.
 - **Automatic bomb names stay out of the report until curated lists exist** — decision
   0006.
+- **Third-party grades are never committed.** They enter only through the private paste
+  importer; a committed ratings or bombs file is the group's own or permitted — decision
+  0007.
+- **Without the public Sealed file, values stack: grades, then Premier Draft as a proxy,
+  then Arena Direct.** A thin sample tightens a value, never replaces it — decision 0007;
+  `tests/unit/test_event_values.py`.
+- **A paste's key is (set, dataset, event type, registered source, UTC import day)**, and
+  private data may not live inside a git work tree — decision 0007;
+  `tests/unit/test_paste_store.py` and `tests/unit/test_datadir.py`.
