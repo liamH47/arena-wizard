@@ -34,10 +34,9 @@ by JavaScript.
 ## The request to post
 
 Revised 2026-09-28 after the milestone-0 panel (decision 0004): the counts are now exact,
-every poll is named, and the text no longer calls the code open source, because no license
-has been chosen.
+and every poll is named. The code is open source under the MIT License (PR #3).
 
-> Hi 17Lands team. I'm building a free tool with public code
+> Hi 17Lands team. I'm building a free, open-source (MIT) tool
 > (https://github.com/liamH47/arena-wizard) that recommends Bo1 sealed decks for a small
 > private group of friends. It is calibrated on your public game datasets, credited with
 > links at the top of every page under CC BY 4.0. It never calls your site on behalf of a
