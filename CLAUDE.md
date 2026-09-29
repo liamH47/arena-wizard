@@ -34,11 +34,12 @@ entry, or an `omit` entry to reach green; `floor_guard` will fail the PR.
 
 - 17Lands public files are the only automated 17Lands source until decision 0002
   records permission. Never call the 17Lands JSON endpoints before that.
-- Decision 0005 allows one other source: a person's manual capture (screenshot or copied
-  table) of a 17Lands page, at most one per set, format, and UTC day, only until the data
-  is available another permitted way. Capture data stays in the private database: never
-  in the repo, the eval report, fixtures, or logs, and always labelled as a manual capture.
-- Respect `SetConfig.embargo_until` for everything except those private manual captures.
+- Decision 0005 allows manual data entry from any source: a user pastes a table they
+  copied by hand. The app never fetches it itself. Each paste names its source and date,
+  at most one per source, set, dataset, and UTC day, and permitted automated data replaces
+  it once available. Pasted data stays in the private database: never in the repo, the
+  eval report, fixtures, or logs; fixtures use made-up numbers in the same layout.
+- Respect `SetConfig.embargo_until` for everything except data a user pasted in.
 - Attribution stays at the top of every page and the top of the README.
 - Production never calls Scryfall; card tables are regenerated with
   `uv run arena-wizard sync-cards` and reviewed as a diff.

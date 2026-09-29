@@ -1,6 +1,6 @@
 # 0002: Ask 17Lands before polling its JSON endpoints
 
-Status: **pending**. Decision 0005 added a third question to the request. The owner posts the request below on the 17Lands Discord (linked from
+Status: **pending**. Decision 0005 (manual data entry) added a third question to the request. The owner posts the request below on the 17Lands Discord (linked from
 https://www.17lands.com/usage_guidelines) and records the reply here with its date.
 Opened 2026-09-28.
 
