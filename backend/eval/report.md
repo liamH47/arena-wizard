@@ -78,6 +78,10 @@ Automatic bombs: 8 (1.072 per pool); names withheld until the set's curated list
 
 51 rows in all; the full ledger is in report.json.
 
+### Baseline: no win rates (rarity averages from the other set, castability, curve; no bombs)
+
+Agreement with players at 1: 32.0% (28.2% to 36.1%, n 531); at 3: 63.5% (59.3% to 67.5%). Pools the engine gets right and this baseline does not: 151; the reverse: 84.
+
 ## SOS
 
 600 sample pools of 7538; split day 2026-04-26; after the split: 31.4% of pools, 31.5% of games; file sha256 `8556b2cebfa23a56`.
@@ -134,6 +138,10 @@ Automatic bombs: 10 (0.953 per pool); names withheld until the set's curated lis
 | UG | 2-3 | BG | 0.7 | yes | no | Slumbering Trudge, Elite Interceptor, Grapple with Death, Magmablood Archaic, Dissection Practice |
 
 9 rows in all; the full ledger is in report.json.
+
+### Baseline: no win rates (rarity averages from the other set, castability, curve; no bombs)
+
+Agreement with players at 1: 95.9% (93.9% to 97.2%, n 555); at 3: 99.6% (98.7% to 99.9%). Pools the engine gets right and this baseline does not: 18; the reverse: 63.
 
 ## Notes
 
