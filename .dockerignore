@@ -1,0 +1,25 @@
+# Only frontend/ and backend/{pyproject.toml,uv.lock,src} are copied; keep the build
+# context small and free of anything local or private.
+.git
+.github
+.claude
+docs
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+**/htmlcov
+**/playwright-report
+**/test-results
+backend/tests
+backend/eval
+backend/src/arena_wizard/static
+.env
+**/*.db
+**/*.sqlite
+**/*.sqlite3

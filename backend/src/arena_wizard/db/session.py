@@ -10,9 +10,10 @@ up after ten seconds instead of hanging a request (docs/plan.md section 11, deci
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, create_engine, event, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 
@@ -26,6 +27,11 @@ def _sqlite_foreign_keys(dbapi_connection: Any, _: Any) -> None:
 def make_engine(url: str) -> Engine:
     """An engine for the URL: foreign keys on for SQLite, Neon-safe settings for Postgres."""
     if url.startswith("sqlite"):
+        database = make_url(url).database
+        if database and database != ":memory:":
+            # SQLite creates the file but not its directory; a fresh data directory would
+            # otherwise fail every connection and the entrypoint would wait forever.
+            Path(database).parent.mkdir(parents=True, exist_ok=True)
         engine = create_engine(url, connect_args={"check_same_thread": False}, hide_parameters=True)
         event.listen(engine, "connect", _sqlite_foreign_keys)
         return engine
