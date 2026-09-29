@@ -71,7 +71,7 @@ def test_loading_a_file_says_downloaded_then_unchanged_then_recounted(
 
 
 def test_a_file_with_no_games_reports_no_days(tmp_path: Path) -> None:
-    empty = gzip.compress((header() + "\n").encode("utf-8"))
+    empty = gzip.compress((header() + "\n").encode("utf-8"), mtime=0)
     assert "0 days (- to -)" in _load(empty, tmp_path)[0]
 
 
@@ -210,7 +210,7 @@ EVAL_ROWS = [
 
 
 def _eval_bytes(rows: list[str] = EVAL_ROWS) -> bytes:
-    return gzip.compress(("\n".join([header(), *rows]) + "\n").encode("utf-8"))
+    return gzip.compress(("\n".join([header(), *rows]) + "\n").encode("utf-8"), mtime=0)
 
 
 def test_deriving_an_eval_set_splits_at_sixty_percent_and_pins_what_it_derived() -> None:

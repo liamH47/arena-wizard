@@ -52,5 +52,9 @@ def file_text() -> str:
 
 
 def file_bytes() -> bytes:
-    """The file gzipped, as 17Lands publishes it."""
-    return gzip.compress(file_text().encode("utf-8"))
+    """The file gzipped, as 17Lands publishes it.
+
+    The gzip timestamp is pinned so every call returns the same bytes; with the
+    default, two calls a second apart hash differently.
+    """
+    return gzip.compress(file_text().encode("utf-8"), mtime=0)
