@@ -5,6 +5,10 @@ Sealed file for weeks, and 17Lands asks tools not to show FRA data before 2026-1
 Decks are built from data you paste in by hand, kept private on your machine (decisions
 0005 and 0007).
 
+Once the web app is deployed (milestone 3), paste on its Pastes page instead. It is the
+group's store of record, and every friend's build reads it. The CLI's store below stays on
+your machine (decision 0008).
+
 ## What to paste, and when
 
 Paste in this order of value. The sealed-analyst measured the draft data as worth about one

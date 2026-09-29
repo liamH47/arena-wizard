@@ -39,5 +39,11 @@ same change that fixes it.
 - **Rarity is per printing.** A card whose printings differ in rarity (Gardenize: rare as
   #103, mythic as #406) gets a slightly different rarity adjustment depending on which
   printing was opened.
+- **Web builds use pastes only until milestone 4.** The server has no 17Lands statistics
+  in its database yet, so SOS and HOB web builds are event mode, and rule 4 refuses their
+  Sealed and Premier Draft pastes. Closes with the refresh job.
+- **Deleting a paste leaves its numbers in builds already stored** (decision 0008,
+  deferred). New builds and "latest" ignore it.
+- **The Postgres-only tests run only in CI** (they need `AW_TEST_PG_URL`).
 - **The FastAPI test client emits a Starlette deprecation warning** asking for `httpx2`.
   Harmless today; revisit when upgrading Starlette.

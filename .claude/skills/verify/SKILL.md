@@ -23,6 +23,16 @@ uv run pytest --cov --cov-fail-under="$(cat coverage_floor.txt)"
 The coverage gate is on the command line, not in `pyproject.toml`, so running a single
 test file while iterating never fails on coverage. Run the whole command before a PR.
 
+Then the Postgres tests and the migration check. CI runs Postgres as a service; locally,
+point `AW_TEST_PG_URL` at any disposable Postgres (they skip when it is unset):
+
+```
+AW_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/db uv run pytest -m postgres --no-cov
+ARENA_WIZARD_DATABASE_URL=sqlite:///./ci-migrations.db uv run alembic upgrade head
+ARENA_WIZARD_DATABASE_URL=sqlite:///./ci-migrations.db uv run alembic check
+uv run alembic upgrade head --sql > /dev/null
+```
+
 ## 2. Coverage ratchet
 
 ```

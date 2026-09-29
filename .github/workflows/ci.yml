@@ -28,6 +28,22 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # Production runs on Postgres (Neon); tests run on SQLite for speed, and the tests
+    # marked `postgres` run here against a real one so dialect differences are caught.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: arena
+          POSTGRES_PASSWORD: arena
+          POSTGRES_DB: arena
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arena"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v7
 
@@ -60,6 +76,27 @@ jobs:
       # stops the number in coverage_floor.txt from ever going down.
       - name: Test with coverage gate
         run: uv run pytest --cov --cov-fail-under="$(cat coverage_floor.txt)"
+
+      # Required here: a missing database fails these tests instead of skipping them.
+      - name: Postgres tests
+        env:
+          AW_TEST_PG_URL: postgresql+psycopg://arena:arena@localhost:5432/arena
+          AW_TEST_PG_REQUIRED: "1"
+        run: |
+          uv run pytest -m postgres --no-cov
+          AW_TEST_DB_URL="$AW_TEST_PG_URL" uv run pytest tests/db tests/api -m "not postgres" --no-cov -q
+          ARENA_WIZARD_DATABASE_URL="$AW_TEST_PG_URL" uv run alembic upgrade head
+          ARENA_WIZARD_DATABASE_URL="$AW_TEST_PG_URL" uv run alembic check
+
+      # The models and the migrations must describe the same schema, and the migrations
+      # must render as plain SQL for review.
+      - name: Migrations match the models
+        env:
+          ARENA_WIZARD_DATABASE_URL: sqlite:///./ci-migrations.db
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
+          uv run alembic upgrade head --sql > /dev/null
 
   floor-guard:
     name: Coverage ratchet
