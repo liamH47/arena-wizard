@@ -1,0 +1,17 @@
+# Normalize line endings to LF everywhere, in the repo and in the working tree.
+#
+# Not just tidiness: generated files (card tables, eval reports) are compared byte for
+# byte. A Windows checkout with core.autocrlf=true would get CRLF while the generators
+# emit LF, so a check would pass on Linux CI and fail locally. A check whose result
+# depends on the developer's OS is worse than no check.
+* text=auto eol=lf
+
+# Binary assets: never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.gz binary
+*.woff binary
+*.woff2 binary

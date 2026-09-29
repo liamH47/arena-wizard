@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Node
+node_modules/
+frontend/dist/
+playwright-report/
+test-results/
+
+# The built frontend is copied here for local end-to-end runs and in the Docker image.
+backend/src/arena_wizard/static/
+
+# Local state and secrets
+.env
+*.db
+*.sqlite
+*.sqlite3
