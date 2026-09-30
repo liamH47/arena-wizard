@@ -313,8 +313,8 @@ def event_result(
     removed = {c.name for c in curated if c.action == "remove"}
     flagged = {n: src for n, (s, src) in scored.items()
                if s >= scoring.bombs.threshold and n not in removed}  # fmt: skip
-    named = [layer.name for layer in layers if layer.name in {src for _, src in scored.values()}]
-    auto = (" and ".join(named), len(flagged)) if named else None
+    used = set(flagged.values()) or {src for _, src in scored.values()}
+    auto = (" and ".join(n.name for n in layers if n.name in used), len(flagged)) if used else None
     lines = tuple(
         data_block(
             config, scoring.event, sources, scores, curated, today, public_embargoed, web, auto
@@ -324,8 +324,17 @@ def event_result(
         return EventResult(lines, (), NO_VALUES.format(code=config.code))
     automatic = {name: score for name, (score, _) in scored.items()}
     inputs = prepare_event_inputs(pool, scores, proxy, direct, scoring, curated, automatic)
-    listed = frozenset(c.name for c in curated if c.action == "add") if curated else None
-    decks = describe_event(build_decks(pool, inputs).decks, inputs.bombs, listed, flagged)
+    labels = {n: f"automatic, from {src}" for n, src in flagged.items()} | {
+        c.name: "the group's list" for c in curated if c.action == "add"
+    }
+    assessed = None if curated else frozenset(scored) | labels.keys()
+    decks = describe_event(
+        build_decks(pool, inputs).decks,
+        inputs.bombs,
+        labels,
+        assessed,
+        scoring.event.bomb_min_games,
+    )
     return EventResult(lines, decks, None if decks else NO_DECK)
 
 

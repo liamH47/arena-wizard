@@ -232,23 +232,26 @@ def value_line(value: CardValue) -> str:
 def _event_bombs(
     deck: ScoredDeck,
     bombs: Mapping[str, float],
-    curated: frozenset[str] | None,
-    origins: Mapping[str, str],
+    labels: Mapping[str, str],
+    assessed: frozenset[str] | None,
+    floor: int,
 ) -> str:
-    if curated is None and not origins:
-        return (
-            "Bombs: not assessed. The automatic list needs more games in pasted win rates, "
-            "and the group's curated list is not written yet."
-        )
-    names = [e.card.front_name for e in deck.spells if e.card.front_name in bombs]
-    if not names:
+    spells = [e.card.front_name for e in deck.spells]
+    names = [n for n in spells if n in bombs]
+    unassessed = [] if assessed is None else [n for n in spells if n not in assessed]
+    if names:
+        head = "Bombs: " + "; ".join(f"{n} ({labels.get(n, 'automatic')})" for n in names) + "."
+    elif not unassessed:
         return "Bombs: none in this deck."
-    said = (
-        f"{n} (the group's list)" if curated and n in curated
-        else f"{n} (automatic, from {origins.get(n, 'win rates')})"
-        for n in names
-    )  # fmt: skip
-    return "Bombs: " + "; ".join(said) + "."
+    elif len(unassessed) == len(spells):
+        return (
+            f"Bombs: not assessed. No spell here has {floor}+ games in hand in pasted win "
+            "rates, and the group's list is not written yet."
+        )
+    else:
+        head = "Bombs: none among the spells assessed."
+    tail = f" {len(unassessed)} not assessed (under {floor} games in hand)." if unassessed else ""
+    return head + tail
 
 
 def _basis_sentence(deck: ScoredDeck) -> str:
@@ -319,10 +322,14 @@ def _event_comparison(deck: ScoredDeck, other: ScoredDeck, grades_only: bool) ->
 def describe_event(
     decks: Sequence[ScoredDeck],
     bombs: Mapping[str, float],
-    curated: frozenset[str] | None,
-    origins: Mapping[str, str],
+    labels: Mapping[str, str],
+    assessed: frozenset[str] | None,
+    floor: int,
 ) -> tuple[ScoredDeck, ...]:
     """Attach explanations to decks valued in event mode (decision 0007). Pure.
+
+    `labels` says where each bomb came from; `assessed` is every card the bomb lists
+    considered, or None when the group's list covers the set; `floor` is the games needed.
 
     Sentences branch on each value's basis. A ranking resting on grades alone never
     claims a measured lead: its uncertainty is printed as assumed.
@@ -330,7 +337,7 @@ def describe_event(
     described = []
     for i, deck in enumerate(decks):
         grades_only = all(v.basis in GRADE_BASES for v in deck.values)
-        sentences = [_basis_sentence(deck), _event_bombs(deck, bombs, curated, origins)]
+        sentences = [_basis_sentence(deck), _event_bombs(deck, bombs, labels, assessed, floor)]
         if deck.splash is not None:
             main = [Color(c) for c in deck.colors]
             splashed = [

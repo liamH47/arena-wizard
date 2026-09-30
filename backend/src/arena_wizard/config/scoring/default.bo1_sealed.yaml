@@ -69,4 +69,4 @@ event:
   proxy_sigma: 2.0          # draft-to-sealed error per card, in q
   min_grade_coverage: 0.8   # a grade source must grade this share of the set's spells
   max_decks: 5              # event mode lists at most this many decks
-  bomb_min_games: 500       # pasted win rates: 150 games is ~0.4 reliable, 500 ~0.7 (0010)
+  bomb_min_games: 500       # automatic bombs from pasted win rates need this many games in hand (0010)

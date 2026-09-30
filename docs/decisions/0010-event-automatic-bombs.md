@@ -22,25 +22,37 @@ list only").
 
 ## Evidence
 
-Draft-based lists at the 500-game floor, compared with the full-season Sealed list, as
-counts only (no names):
+This measures agreement, not accuracy: the reference is itself an automatic list, the
+full-season Sealed file's list at the same 500-game floor. Counts only, no names. Precision
+is flags also on the reference; recall is the reference's flags found.
 
-| Set | Draft data used | Flagged | Also on the Sealed list |
+| List | Flags | Precision | Recall |
 |---|---|---|---|
-| SOS | 10% | 10 | 6 of 10 |
-| SOS | 100% | 13 | 7 of 10 |
-| HOB | 10% | 7 | 3 of 7 |
-| HOB | 100% | 7 | 3 of 7 |
+| SOS Sealed, odd days vs even days (the ceiling) | 6 | 4/6 | 4/7 |
+| SOS draft, first 10% of games by date | 9 | 8/9 | 8/10 |
+| SOS draft, random 10%, three seeds | 9-10 | 6/10, 6/10, 6/9 | 6/10 each |
+| SOS draft, full season | 13 | 7/13 | 7/10 |
+| HOB Sealed, odd days vs even days (the ceiling) | 6 | 4/6 | 4/6 |
+| HOB draft, first 10% of games by date | 6 | 2/6 | 2/7 |
+| HOB draft, random 10%, three seeds | 4-7 | 3/7, 2/4, 2/4 | 2-3/7 |
+| HOB draft, full season | 7 | 3/7 | 3/7 |
 
-The list is as good on a tenth of a season as on all of it: about 60% of flags match on
-SOS and about 40% on HOB. A wrong flag costs at most 1.5 points, about 0.12 win-rate
-points. Builds say which layer each bomb came from, and the group's list, or a card
-adjustment (decision 0011), overrides it.
+- **The ceiling.** Sealed agrees with itself only about two-thirds of the time, so no list
+  can do much better.
+- **SOS.** Draft data reaches that ceiling, and early data did too.
+- **HOB.** Draft data agrees on about a third, a weak stand-in.
+- **Why that's acceptable.** A wrong flag costs 1.5 points per copy, and builds name each
+  bomb's source. So a friend can discount "from draft data" or fix it with an adjustment
+  (decision 0011).
+- **Unassessed cards.** A deck counts its spells under the floor ("N not assessed"), so
+  "no bombs" is never claimed for cards that were not checked (recommendation-auditor).
 
 ## Not adopted
 
 - **A higher threshold for draft data on HOB** (sealed-analyst): set-specific, and FRA is
   the target; revisit with FRA's first public file.
+- **A committed command for the table** (recommendation-auditor): a one-off sanity check,
+  not a gate. The method is above: `event_bomb_scores` on each file's day or game subset.
 
 ## Eval
 

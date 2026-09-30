@@ -307,29 +307,47 @@ def test_each_value_line_says_what_the_value_rests_on() -> None:
 def _event_sentences(
     *decks: ScoredDeck,
     bombs: Mapping[str, float] | None = None,
-    curated: frozenset[str] | None = frozenset(),
-    origins: Mapping[str, str] | None = None,
+    labels: Mapping[str, str] | None = None,
+    assessed: frozenset[str] | None = None,
 ) -> list[tuple[str, ...]]:
-    return [d.explanations for d in describe_event(decks, bombs or {}, curated, origins or {})]
+    return [d.explanations for d in describe_event(decks, bombs or {}, labels or {}, assessed, 500)]
+
+
+AUTO = {"A": "automatic, from draft data"}
 
 
 @pytest.mark.parametrize(
-    ("bombs", "curated", "origins", "sentence"),
+    ("spells", "bombs", "labels", "assessed", "sentence"),
     [
-        ({}, None, {}, "Bombs: not assessed. The automatic list needs more games"),
-        ({}, frozenset(), {}, "Bombs: none in this deck."),
-        ({"A": 2.5}, None, {"A": "draft data"}, "Bombs: A (automatic, from draft data)."),
-        ({"A": 2.5}, frozenset({"A"}), {"A": "draft data"}, "Bombs: A (the group's list)."),
+        ("A", {}, {}, frozenset(), "Bombs: not assessed. No spell here has 500+ games in hand"),
+        ("A", {}, {}, None, "Bombs: none in this deck."),
+        ("A", {"A": 2.5}, AUTO, frozenset("A"), "Bombs: A (automatic, from draft data)."),
+        ("A", {"A": 2.5}, {"A": "the group's list"}, None, "Bombs: A (the group's list)."),
+        (
+            "AB",
+            {},
+            {},
+            frozenset("A"),
+            "Bombs: none among the spells assessed. 1 not assessed (under 500 games in hand).",
+        ),
+        (
+            "AB",
+            {"A": 2.5},
+            AUTO,
+            frozenset("A"),
+            "Bombs: A (automatic, from draft data). 1 not assessed (under 500 games in hand).",
+        ),
     ],
 )
-def test_event_bombs_say_where_each_bomb_came_from(
+def test_event_bombs_say_where_each_bomb_came_from_and_what_was_not_assessed(
+    spells: str,
     bombs: dict[str, float],
-    curated: frozenset[str] | None,
-    origins: dict[str, str],
+    labels: dict[str, str],
+    assessed: frozenset[str] | None,
     sentence: str,
 ) -> None:
-    deck = _event_deck({"A": (1.0, ValueBasis.GRADES)})
-    ((_, said),) = _event_sentences(deck, bombs=bombs, curated=curated, origins=origins)
+    deck = _event_deck({name: (1.0, ValueBasis.GRADES) for name in spells})
+    ((_, said, *_),) = _event_sentences(deck, bombs=bombs, labels=labels, assessed=assessed)
     assert said.startswith(sentence)
 
 
