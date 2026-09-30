@@ -659,3 +659,39 @@ def test_an_adjuster_without_a_display_name_is_named_by_their_email(session: Ses
     repository.upsert_user(session, "carol", "carol@example.com", "", "", NOW)
     repository.set_adjustment(session, "FRA", "A", "remove", None, "", "carol", NOW)
     assert repository.list_adjustments(session, "FRA")[0].by == "carol"
+
+
+def _adjustment_log(session: Session) -> list[tuple[str, str]]:
+    rows = session.scalars(select(CardAdjustmentLog).order_by(CardAdjustmentLog.id))
+    return [(r.action, r.changed_by) for r in rows]
+
+
+def test_a_first_adjustment_that_lost_an_insert_race_still_wins_as_the_last_writer(
+    session: Session, sessions: sessionmaker[Session]
+) -> None:
+    _race(session, sessions, lambda other: repository.set_adjustment(
+        other, "FRA", "A", "add", None, "", "bob", NOW))  # fmt: skip
+    assert repository.set_adjustment(session, "FRA", "A", None, 1.5, "", "alice", LATER)
+    (stored,) = repository.list_adjustments(session, "FRA")
+    assert (stored.bomb, stored.q_delta, stored.by) == (None, 1.5, "Alice")
+    assert _adjustment_log(session) == [("set", "bob"), ("set", "alice")]
+
+
+def test_an_adjustment_cleared_while_it_was_being_changed_is_set_again(
+    session: Session, sessions: sessionmaker[Session]
+) -> None:
+    repository.set_adjustment(session, "FRA", "A", "add", None, "", "alice", NOW)
+    _race_before_update(session, sessions, lambda other: repository.clear_adjustment(
+        other, "FRA", "A", "bob", NOW))  # fmt: skip
+    assert repository.set_adjustment(session, "FRA", "A", "remove", None, "", "alice", LATER)
+    assert [a.bomb for a in repository.list_adjustments(session, "FRA")] == ["remove"]
+    assert _adjustment_log(session) == [("set", "alice"), ("clear", "bob"), ("set", "alice")]
+
+
+def test_an_adjustment_that_loses_its_retry_too_is_a_conflict(
+    session: Session, sessions: sessionmaker[Session]
+) -> None:
+    _race(session, sessions, lambda other: repository.set_adjustment(
+        other, "FRA", "A", "add", None, "", "bob", NOW))  # fmt: skip
+    with pytest.raises(IntegrityError):
+        repository.set_adjustment(session, "FRA", "A", "remove", None, "", "alice", NOW, False)

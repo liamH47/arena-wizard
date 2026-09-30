@@ -312,7 +312,10 @@ def event_result(
     )
     layers = [layer for layer in (direct, proxy) if layer is not None]
     scored = event_bomb_scores(layers, rarity_of, scoring)
+    in_pool = {e.card.front_name for e in pool.entries}
+    adjustments = [a for a in adjustments if a.name in in_pool]
     removed = {c.name for c in curated if c.action == "remove"}
+    removed |= {a.name for a in adjustments if a.bomb == "remove"}
     flagged = {n: src for n, (s, src) in scored.items()
                if s >= scoring.bombs.threshold and n not in removed}  # fmt: skip
     used = set(flagged.values()) or {src for _, src in scored.values()}
@@ -322,16 +325,22 @@ def event_result(
             config, scoring.event, sources, scores, curated, today, public_embargoed, web, auto
         )
     )
+    if adjustments:
+        lines += (
+            f"  Adjusted     used     {len(adjustments)} of this pool's cards, by the group.",
+        )
     if scores is None and proxy is None and direct is None:
         return EventResult(lines, (), NO_VALUES.format(code=config.code))
     automatic = {name: score for name, (score, _) in scored.items()}
     inputs = prepare_event_inputs(
         pool, scores, proxy, direct, scoring, curated, automatic, adjustments
     )
-    labels = {n: f"automatic, from {src}" for n, src in flagged.items()} | {
-        c.name: "the group's list" for c in curated if c.action == "add"
-    }
-    assessed = None if curated else frozenset(scored) | labels.keys()
+    labels = (
+        {n: f"automatic, from {src}" for n, src in flagged.items()}
+        | {c.name: "the group's list" for c in curated if c.action == "add"}
+        | {a.name: f"added by {a.by}" for a in adjustments if a.bomb == "add"}
+    )
+    assessed = None if curated else frozenset(scored) | labels.keys() | removed
     decks = describe_event(
         build_decks(pool, inputs).decks,
         inputs.bombs,

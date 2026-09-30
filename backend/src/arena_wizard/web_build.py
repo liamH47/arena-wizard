@@ -108,14 +108,17 @@ def inputs_key(
     adjustments: Sequence[Adjustment] = (),
 ) -> str:
     """Everything that can change a build: the pool, every paste as stored (rows, parser
-    version, dates), the group's adjustments, the package, and whether the set's embargo
-    has passed."""
+    version, dates), the group's adjustments to the pool's cards (not their notes or who made
+    them), the package, and whether the set's embargo has passed."""
     config = load_set_config(pool.set_code)
+    pool_names = {e.card.front_name for e in pool.entries}
     return _digest(
         {
             "pool": pool_hash(pool),
             "pastes": sorted(to_json(p) for p in pastes),
-            "adjustments": sorted(dataclasses.astuple(a) for a in adjustments),
+            "adjustments": sorted(
+                (a.name, a.bomb, a.q_delta) for a in adjustments if a.name in pool_names
+            ),
             "package": package_digest(),
             "embargo_passed": today >= config.embargo_until,
         }

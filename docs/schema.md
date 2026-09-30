@@ -5,7 +5,7 @@ Postgres in production (Neon), SQLite in tests. Migrations live in
 `db/models.py` and this page. CI fails when the models and migrations differ (`alembic
 check`). Every timestamp is stored and returned in UTC.
 
-Revision `0001` (milestone 3; decisions 0007 and 0008).
+Revision `0002` (milestone 3, decisions 0007 and 0008; card adjustments, decision 0011).
 
 ## Tables
 
@@ -48,7 +48,7 @@ deleting a pool someone played is refused with 409, never a silent loss.
 | sign-in | `users.user_id` | Updates profile and `last_seen_at` |
 | create pool | `pools.id` | Same body as the create: returns the pool (200), even after edits. Different body or another user: 409, unchanged. |
 | edit pool | `pools.id` | Same text: no change. The create's body hash is kept. |
-| build | (`pool_id`, `inputs_key`) | Returns the existing build. The key covers the pool, every paste as stored, the set's card adjustments, the package's files, and whether the embargo has passed. |
+| build | (`pool_id`, `inputs_key`) | Returns the existing build. The key covers the pool, every paste as stored, adjustments to the pool's cards (not notes or who), the package's files, and whether the embargo has passed. |
 | record run | `deck_runs.id` | Same body: returns the run (200), never undoing a later PATCH. Different body or another user: 409. |
 | edit run | `deck_runs.id` | Only fields that differ change |
 | paste | the pastes unique key | Identical: no change. Changed: one row updated in place, `replaced_at` set, but only if the row still holds what the check saw (otherwise 409). |

@@ -93,7 +93,7 @@ def dump(model: BaseModel) -> dict[str, Any]:
 
 
 class AdjustmentSet(BaseModel):
-    """A card's adjustment: add or remove it as a bomb, nudge its value, or both."""
+    """A card's adjustment: add or remove it as a bomb, nudge its value (to 0.1), or both."""
 
     bomb: Literal["add", "remove"] | None = None
     q_delta: float | None = Field(default=None, ge=-10, le=10)
@@ -101,6 +101,7 @@ class AdjustmentSet(BaseModel):
 
     @model_validator(mode="after")
     def _says_something(self) -> Self:
+        self.q_delta = round(self.q_delta, 1) if self.q_delta else None
         if self.bomb is None and not self.q_delta:
             raise ValueError("an adjustment needs a bomb change or a non-zero value change")
         return self

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from arena_wizard.catalog import load_packaged_card_table
 from arena_wizard.engine.values import spell_rarities
-from tests.api.app_fixture import ALICE, BOB, as_user, create, make, paste_grades
+from tests.api.app_fixture import ALICE, BOB, as_user, create, fra_pool, make, paste_grades
 
 SPELL = min(spell_rarities(load_packaged_card_table("FRA").cards))
 URL = f"/api/adjustments/FRA/{SPELL}"
@@ -60,18 +60,41 @@ def test_the_largest_allowed_value_change_is_accepted(client: TestClient) -> Non
     assert client.put(URL, json={"q_delta": -10}, headers=as_user(ALICE)).status_code == 200
 
 
-def test_an_adjustment_changes_the_build_and_shows_who_made_it(client: TestClient) -> None:
+def test_a_value_change_is_kept_to_one_decimal_and_one_that_rounds_to_zero_is_refused(
+    client: TestClient,
+) -> None:
+    assert client.put(URL, json={"q_delta": 1e-12}, headers=as_user(ALICE)).status_code == 422
+    client.put(URL, json={"q_delta": 1.26}, headers=as_user(ALICE))
+    (listed,) = client.get("/api/adjustments?set_code=FRA", headers=as_user(ALICE)).json()
+    assert listed["q_delta"] == 1.3
+
+
+def test_only_adjustments_to_the_pools_cards_change_its_build(client: TestClient) -> None:
     pool_id = create(client).json()["id"]
     assert paste_grades(client).status_code == 201
     build = f"/api/pools/{pool_id}/builds"
     first = client.post(build, headers=as_user(ALICE)).json()
-    name = first["decks"][0]["values"][0]["name"]
-    body = {"q_delta": 3.0}
-    assert (
-        client.put(f"/api/adjustments/FRA/{name}", json=body, headers=as_user(BOB)).status_code
-        == 200
-    )
+    deck = first["decks"][0]
+    name = deck["spells"][0]["name"]
+    outside = next(n for n in sorted(spell_rarities(load_packaged_card_table("FRA").cards))
+                   if n not in fra_pool())  # fmt: skip
+    adjust = f"/api/adjustments/FRA/{name}"
+
+    client.put(f"/api/adjustments/FRA/{outside}", json={"bomb": "add"}, headers=as_user(BOB))
+    assert client.post(build, headers=as_user(ALICE)).json()["id"] == first["id"]
+
+    client.put(adjust, json={"bomb": "add", "q_delta": 3.0}, headers=as_user(BOB))
     rebuilt = client.post(build, headers=as_user(ALICE))
     assert rebuilt.status_code == 201
-    values = {v["name"]: v for d in rebuilt.json()["decks"] for v in d["values"]}
+    body = rebuilt.json()
+    values = {v["name"]: v for d in body["decks"] for v in d["values"]}
     assert values[name]["adjustment"] == {"q_delta": 3.0, "by": "Bob"}
+    assert any(f"{name} (added by Bob)" in s for d in body["decks"] for s in d["explanations"])
+    assert any(line.startswith("  Adjusted     used     1 of") for line in body["data_lines"])
+
+    note = {"bomb": "add", "q_delta": 3.0, "note": "typo fixed"}
+    client.put(adjust, json=note, headers=as_user(ALICE))
+    assert client.post(build, headers=as_user(ALICE)).json()["id"] == body["id"]
+
+    client.delete(adjust, headers=as_user(BOB))
+    assert client.post(build, headers=as_user(ALICE)).json()["id"] == first["id"]

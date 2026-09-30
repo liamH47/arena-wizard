@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -665,42 +665,49 @@ def set_adjustment(
     note: str,
     user_id: str,
     now: dt.datetime,
+    retry: bool = True,
 ) -> bool:
-    """Set a card's adjustment and log it; False when nothing changed. Last writer wins."""
-    row = session.scalars(
-        select(CardAdjustmentRow).where(
-            CardAdjustmentRow.set_code == set_code, CardAdjustmentRow.name == name
+    """Set a card's adjustment and log it; False when nothing changed. Last writer wins: a
+    write that loses a race with another friend's insert or clear is retried once."""
+    key = (CardAdjustmentRow.set_code == set_code, CardAdjustmentRow.name == name)
+    current = session.execute(
+        select(CardAdjustmentRow.bomb, CardAdjustmentRow.q_delta, CardAdjustmentRow.note).where(
+            *key
         )
     ).first()
-    if row is not None and (row.bomb, row.q_delta, row.note) == (bomb, q_delta, note):
+    if current is not None and tuple(current) == (bomb, q_delta, note):
         return False
-    if row is None:
-        row = CardAdjustmentRow(set_code=set_code, name=name)
-        session.add(row)
-    row.bomb, row.q_delta, row.note, row.updated_by, row.updated_at = (
-        bomb,
-        q_delta,
-        note,
-        user_id,
-        now,
-    )
-    _log(session, set_code, name, "set", bomb, q_delta, note, user_id, now)
-    session.commit()
+    fields: dict[str, Any] = {"bomb": bomb, "q_delta": q_delta, "note": note}
+    fields |= {"updated_by": user_id, "updated_at": now}
+    try:
+        if current is None:
+            session.add(CardAdjustmentRow(set_code=set_code, name=name, **fields))
+        else:
+            updated = session.execute(update(CardAdjustmentRow).where(*key).values(**fields))
+            if updated.rowcount != 1:  # type: ignore[attr-defined]
+                raise IntegrityError("cleared since it was read", None, ValueError())
+        _log(session, set_code, name, "set", bomb, q_delta, note, user_id, now)
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        if not retry:
+            raise
+        return set_adjustment(session, set_code, name, bomb, q_delta, note, user_id, now, False)
     return True
 
 
 def clear_adjustment(
     session: Session, set_code: str, name: str, user_id: str, now: dt.datetime
 ) -> bool:
-    """Remove a card's adjustment and log it; False when there was none."""
-    row = session.scalars(
-        select(CardAdjustmentRow).where(
+    """Remove a card's adjustment and log it; False, with nothing logged, when there was none."""
+    deleted = session.execute(
+        delete(CardAdjustmentRow).where(
             CardAdjustmentRow.set_code == set_code, CardAdjustmentRow.name == name
         )
-    ).first()
-    if row is None:
+    )
+    if deleted.rowcount != 1:  # type: ignore[attr-defined]
+        session.rollback()
         return False
-    session.delete(row)
     _log(session, set_code, name, "clear", None, None, "", user_id, now)
     session.commit()
     return True
