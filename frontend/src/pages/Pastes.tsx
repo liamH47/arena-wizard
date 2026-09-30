@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 
 import { ApiError, decodeUpload, jsonBody, request } from '../api/client'
-import type { Paste, PasteResult, PasteSource, SetInfo } from '../api/types'
+import type { Adjustment, Paste, PasteResult, PasteSource, SetInfo } from '../api/types'
 import { Button, Notice } from '../components/ui'
 import { errorText, inputClass, when } from '../format'
 import { useMe } from '../me-context'
@@ -20,6 +20,7 @@ export default function Pastes() {
   const [sources, setSources] = useState<PasteSource[]>([])
   const [setCode, setSetCode] = useState('')
   const [pastes, setPastes] = useState<Paste[]>([])
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([])
   const [dataset, setDataset] = useState<'grades' | 'card-data'>('grades')
   const [sourceId, setSourceId] = useState('')
   const [ownName, setOwnName] = useState('')
@@ -44,14 +45,37 @@ export default function Pastes() {
       .catch((e: unknown) => setResult({ tone: 'error', lines: [errorText(e)] }))
   }, [])
 
-  const load = useCallback(() => {
-    if (!setCode) return
-    request<Paste[]>(`/api/pastes?set_code=${encodeURIComponent(setCode)}`)
-      .then(setPastes)
-      .catch((e: unknown) => setResult({ tone: 'error', lines: [errorText(e)] }))
-  }, [setCode])
+  const [loads, setLoads] = useState(0)
+  const load = useCallback(() => setLoads((n) => n + 1), [])
 
-  useEffect(load, [load])
+  // A response for a set no longer chosen is dropped, so the lists always match the heading.
+  useEffect(() => {
+    if (!setCode) return
+    let live = true
+    const failed = (e: unknown) => setResult({ tone: 'error', lines: [errorText(e)] })
+    const query = `?set_code=${encodeURIComponent(setCode)}`
+    request<Paste[]>(`/api/pastes${query}`)
+      .then((found) => live && setPastes(found))
+      .catch(failed)
+    request<Adjustment[]>(`/api/adjustments${query}`)
+      .then((found) => live && setAdjustments(found))
+      .catch(failed)
+    return () => {
+      live = false
+    }
+  }, [setCode, loads])
+
+  async function clearAdjustment(name: string) {
+    try {
+      await request(`/api/adjustments/${encodeURIComponent(setCode)}/${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+      })
+      load()
+    } catch (e) {
+      setResult({ tone: 'error', lines: [errorText(e)] })
+    }
+  }
+
 
   const choices = sources.filter((s) => s.dataset === dataset)
   const chosenSource = sourceId === 'own' ? `own-${ownName.trim().toLowerCase()}` : sourceId
@@ -284,6 +308,38 @@ export default function Pastes() {
                     Delete
                   </Button>
                 )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section className="space-y-3">
+        <h2 className="text-xl font-semibold">{setCode} card adjustments</h2>
+        <p className="text-sm text-slate-600">
+          Made from a deck’s “Why this deck” card values, and shared by the group.
+        </p>
+        {adjustments.length === 0 ? (
+          <p className="text-sm text-slate-600">No cards adjusted for this set.</p>
+        ) : (
+          <ul className="space-y-2">
+            {adjustments.map((a) => (
+              <li
+                key={a.name}
+                className="space-y-1 rounded-md border border-slate-200 bg-white p-3 text-sm"
+                data-testid="adjustment"
+              >
+                <p className="font-medium">{a.name}</p>
+                <p className="text-slate-600">
+                  {[
+                    a.bomb === 'add' ? 'always a bomb' : a.bomb === 'remove' ? 'never a bomb' : null,
+                    a.q_delta !== null ? `value ${a.q_delta > 0 ? '+' : ''}${a.q_delta.toFixed(1)}` : null,
+                    `by ${a.by}, ${when(a.updated_at)}`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+                {a.note && <p className="break-words">{a.note}</p>}
+                <Button onClick={() => void clearAdjustment(a.name)}>Clear</Button>
               </li>
             ))}
           </ul>

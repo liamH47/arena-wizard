@@ -197,7 +197,7 @@ def test_builds_are_reused_until_a_new_paste_changes_their_inputs(
     graded = client.post(f"/api/pools/{pool_id}/builds", headers=as_user(ALICE))
     assert graded.status_code == 201
     body = graded.json()
-    assert body["id"] != empty["id"] and body["refusal"] is None
+    assert body["id"] != empty["id"] and body["refusal"] is None and body["set_code"] == "FRA"
     deck = body["decks"][0]
     assert deck["deck_index"] == 0 and deck["arena_list"]
     assert {"label", "terms", "spells", "lands", "values", "explanations", "toss_up"} <= set(deck)
