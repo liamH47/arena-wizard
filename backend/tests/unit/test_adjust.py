@@ -16,6 +16,7 @@ VALUES = {"A": CardValue("A", 10.0, None, None, None, 0, "grades", 1.0, ValueBas
         (Adjustment("A", "add", None, "", "Alice"), 10.0, {"A": 2.0, "B": 3.0}),
         (Adjustment("B", "add", None, "", "Alice"), 10.0, {"B": 3.0}),  # keeps its score
         (Adjustment("B", "remove", None, "", "Alice"), 10.0, {}),
+        (Adjustment("A", "add", 2.5, "", "Alice"), 12.5, {"A": 2.0, "B": 3.0}),
     ],
 )
 def test_adjustments_win_over_the_engines_values_and_bombs(

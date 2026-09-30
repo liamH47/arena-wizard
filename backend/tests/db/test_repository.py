@@ -644,12 +644,15 @@ def test_an_adjustment_is_logged_once_per_change_and_names_who_made_it(session: 
     assert repository.set_adjustment(session, "FRA", "A", "add", None, "", "alice", NOW)
     assert not repository.set_adjustment(session, "FRA", "A", "add", None, "", "bob", LATER)
     assert repository.set_adjustment(session, "FRA", "A", None, 1.5, "late game", "bob", LATER)
-    assert [a.by for a in repository.list_adjustments(session, "FRA")] == ["Bob"]
+    (stored,) = repository.list_adjustments(session, "FRA")
+    assert (stored.bomb, stored.q_delta, stored.note, stored.by) == (None, 1.5, "late game", "Bob")
+    assert repository.set_adjustment(session, "FRA", "A", None, 1.5, "early too", "bob", LATER)
+    assert repository.list_adjustments(session, "FRA")[0].note == "early too"
     assert repository.list_adjustments(session, "HOB") == []
     assert repository.clear_adjustment(session, "FRA", "A", "alice", LATER)
     assert not repository.clear_adjustment(session, "FRA", "A", "alice", LATER)
     assert repository.list_adjustments(session, "FRA") == []
-    assert log() == [("set", "alice"), ("set", "bob"), ("clear", "alice")]
+    assert log() == [("set", "alice"), ("set", "bob"), ("set", "bob"), ("clear", "alice")]
 
 
 def test_an_adjuster_without_a_display_name_is_named_by_their_email(session: Session) -> None:

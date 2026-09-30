@@ -46,6 +46,7 @@ def test_an_adjustment_is_shared_by_the_group_and_repeating_it_changes_nothing(
         (URL, {}),
         (URL, {"q_delta": 0}),
         (URL, {"q_delta": 10.5}),
+        (URL, {"q_delta": -10.5}),
         (URL, {"bomb": "maybe"}),
     ],
 )
@@ -53,6 +54,10 @@ def test_unknown_cards_and_empty_or_out_of_range_adjustments_are_refused(
     client: TestClient, url: str, body: dict[str, Any]
 ) -> None:
     assert client.put(url, json=body, headers=as_user(ALICE)).status_code == 422
+
+
+def test_the_largest_allowed_value_change_is_accepted(client: TestClient) -> None:
+    assert client.put(URL, json={"q_delta": -10}, headers=as_user(ALICE)).status_code == 200
 
 
 def test_an_adjustment_changes_the_build_and_shows_who_made_it(client: TestClient) -> None:
