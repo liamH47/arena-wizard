@@ -40,3 +40,10 @@ export async function builtPool(api: APIRequestContext): Promise<string> {
   }
   return id
 }
+
+export async function clearAdjustments(api: APIRequestContext): Promise<void> {
+  const listed = await api.get('/api/adjustments?set_code=FRA')
+  for (const { name } of (await listed.json()) as { name: string }[]) {
+    await api.delete(`/api/adjustments/FRA/${encodeURIComponent(name)}`)
+  }
+}

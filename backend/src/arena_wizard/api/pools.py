@@ -90,12 +90,13 @@ def pool_out(row: PoolRow) -> dict[str, Any]:
     }
 
 
-def build_out(session: DbSession, build: BuildRow, current: bool) -> dict[str, Any]:
+def build_out(session: DbSession, row: PoolRow, build: BuildRow, current: bool) -> dict[str, Any]:
     """A build with its Data block and decks, and whether it matches the pool's inputs now."""
     return {
         "id": build.id,
         "current": current,
         "pool_id": build.pool_id,
+        "set_code": row.set_code,
         "mode": build.mode,
         "config_version": build.config_version,
         "created_at": build.created_at.isoformat(),
@@ -234,7 +235,7 @@ def build(
     now_inputs = _current(session, row, now)
     existing = repository.find_build(session, pool_id, now_inputs.key)
     if existing is not None:
-        return build_out(session, existing, current=True)
+        return build_out(session, row, existing, current=True)
     mode, result, version = run_build(
         now_inputs.pool,
         now_inputs.pastes,
@@ -264,7 +265,7 @@ def build(
         now,
     )
     response.status_code = 201
-    return build_out(session, saved, current=True)
+    return build_out(session, row, saved, current=True)
 
 
 @router.get("/{pool_id}/builds/latest")
@@ -280,8 +281,8 @@ def latest_build(pool_id: str, user: CurrentUser, session: DbSession, now: Now) 
         raise _not_found(error) from error
     found = repository.find_build(session, pool_id, _current(session, row, now).key)
     if found is not None:
-        return build_out(session, found, current=True)
+        return build_out(session, row, found, current=True)
     newest = repository.latest_build(session, user.user_id, pool_id)
     if newest is None:
         raise HTTPException(404, f"pool {pool_id} has no build yet")
-    return build_out(session, newest, current=False)
+    return build_out(session, row, newest, current=False)

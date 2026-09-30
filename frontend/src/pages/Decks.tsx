@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router'
 import { ApiError, jsonBody, newId, request } from '../api/client'
 import type { Build, Deck, Run } from '../api/types'
 import { Button, LoadError, Notice } from '../components/ui'
-import { errorText } from '../format'
+import { errorText, inputClass } from '../format'
 
 // The deck page, ordered for a phone between matches: which deck, the list to click into
 // Arena, and the result. Everything that explains the ranking sits in closed sections below.
@@ -219,7 +219,82 @@ function RecordResult({ buildId, deckIndex }: { buildId: number; deckIndex: numb
 
 // ---- why this deck -------------------------------------------------------------------------
 
-function CardValues({ deck }: { deck: Deck }) {
+// A group-shared correction to one card (decision 0011). It changes builds only after
+// "Build again", so it never moves a deck the player is already piloting.
+function AdjustCard({ setCode, name, onSaved }: { setCode: string; name: string; onSaved: () => void }) {
+  const [bomb, setBomb] = useState<'' | 'add' | 'remove'>('')
+  const [delta, setDelta] = useState(0)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
+  const path = `/api/adjustments/${encodeURIComponent(setCode)}/${encodeURIComponent(name)}`
+
+  async function save(clear: boolean) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await request(
+        path,
+        clear
+          ? { method: 'DELETE' }
+          : { method: 'PUT', ...jsonBody({ bomb: bomb || null, q_delta: delta || null, note }) },
+      )
+      setMessage({ tone: 'ok', text: `${clear ? 'Cleared' : 'Saved'} for the group. Build again to use it.` })
+      onSaved()
+    } catch (e) {
+      setMessage({ tone: 'error', text: errorText(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <details>
+      <summary className="min-h-11 cursor-pointer py-2 text-slate-700">Adjust</summary>
+      <div className="space-y-2 pb-2">
+        <label className="block">
+          Bomb
+          <select
+            className={`${inputClass} mt-1`}
+            value={bomb}
+            onChange={(e) => setBomb(e.target.value as '' | 'add' | 'remove')}
+          >
+            <option value="">As the data says</option>
+            <option value="add">Always a bomb</option>
+            <option value="remove">Never a bomb</option>
+          </select>
+        </label>
+        <div className="flex items-center gap-2">
+          <span className="w-14 font-medium">Value</span>
+          <Button aria-label="lower value" onClick={() => setDelta((d) => Math.max(-10, d - 0.5))}>
+            −
+          </Button>
+          <span className="w-12 text-center tabular-nums" aria-live="polite">
+            {points(delta)}
+          </span>
+          <Button aria-label="raise value" onClick={() => setDelta((d) => Math.min(10, d + 0.5))}>
+            +
+          </Button>
+        </div>
+        <label className="block">
+          Note
+          <input className={`${inputClass} mt-1`} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        {message !== null && <Notice tone={message.tone}>{message.text}</Notice>}
+        <div className="flex flex-wrap gap-2">
+          <Button kind="primary" disabled={busy || (bomb === '' && delta === 0)} onClick={() => void save(false)}>
+            Save for the group
+          </Button>
+          <Button disabled={busy} onClick={() => void save(true)}>
+            Clear
+          </Button>
+        </div>
+      </div>
+    </details>
+  )
+}
+
+function CardValues({ deck, setCode, onAdjusted }: { deck: Deck; setCode: string; onAdjusted: () => void }) {
   const values = [...deck.values].sort((a, b) => b.q - a.q || a.name.localeCompare(b.name))
   return (
     <div className="space-y-1">
@@ -240,6 +315,12 @@ function CardValues({ deck }: { deck: Deck }) {
                 Weight: {v.layers.map((l) => `${l.name} ${Math.round(100 * l.share)}%`).join(', ')}
               </span>
             )}
+            {v.adjustment !== null && (
+              <span className="block text-slate-600">
+                Adjusted {points(v.adjustment.q_delta)} by {v.adjustment.by}
+              </span>
+            )}
+            <AdjustCard setCode={setCode} name={v.name} onSaved={onAdjusted} />
           </li>
         ))}
       </ul>
@@ -247,7 +328,7 @@ function CardValues({ deck }: { deck: Deck }) {
   )
 }
 
-function WhyThisDeck({ deck }: { deck: Deck }) {
+function WhyThisDeck({ deck, setCode, onAdjusted }: { deck: Deck; setCode: string; onAdjusted: () => void }) {
   return (
     <details className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
       <summary className="min-h-11 cursor-pointer py-2 font-medium">Why this deck</summary>
@@ -272,7 +353,7 @@ function WhyThisDeck({ deck }: { deck: Deck }) {
             ))}
           </dl>
         </div>
-        <CardValues deck={deck} />
+        <CardValues deck={deck} setCode={setCode} onAdjusted={onAdjusted} />
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
           {deck.spells
             .filter((s) => s.image_uri !== null)
@@ -298,11 +379,15 @@ function DeckCard({
   rank,
   buildId,
   stale,
+  setCode,
+  onAdjusted,
 }: {
   deck: Deck
   rank: number
   buildId: number
   stale: boolean
+  setCode: string
+  onAdjusted: () => void
 }) {
   const [open, setOpen] = useState(rank === 1)
   const summary = tradeOff(deck)
@@ -336,7 +421,7 @@ function DeckCard({
               <RecordResult buildId={buildId} deckIndex={deck.deck_index} />
             </>
           )}
-          <WhyThisDeck deck={deck} />
+          <WhyThisDeck deck={deck} setCode={setCode} onAdjusted={onAdjusted} />
         </>
       )}
     </article>
@@ -416,7 +501,7 @@ export default function Decks() {
           {!build.current && (
             <Notice tone="warn">
               <p className="mb-2">
-                The pool, pastes, or the app changed since this build — build again.
+                The pool, pastes, card adjustments, or the app changed since this build — build again.
               </p>
               {buildButton('Build again')}
             </Notice>
@@ -431,6 +516,8 @@ export default function Decks() {
                 rank={i + 1}
                 buildId={build.id}
                 stale={!build.current}
+                setCode={build.set_code}
+                onAdjusted={reload}
               />
             ))}
           </div>
