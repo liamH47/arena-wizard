@@ -98,7 +98,7 @@ def test_a_rolled_back_build_serves_a_newer_database_without_migrating(tmp_path:
     lines: list[str] = []
     migrate(url, lines.append)
     assert lines == [
-        "database at revision 9999, ahead of this build's head 0001; serving without "
+        "database at revision 9999, ahead of this build's head 0002; serving without "
         "migrating (a rollback)"
     ]
     assert database_revision(url) == "9999"
@@ -110,8 +110,8 @@ def test_migrating_names_where_it_starts_and_ends(tmp_path: Path) -> None:
     migrate(url, lines.append)
     migrate(url, lines.append)
     assert lines == [
-        "migrating from an empty database to 0001",
-        "migrating from 0001 to 0001",
+        "migrating from an empty database to 0002",
+        "migrating from 0002 to 0002",
     ]
 
 

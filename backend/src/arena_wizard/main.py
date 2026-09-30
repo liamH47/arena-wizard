@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from arena_wizard import __version__
-from arena_wizard.api import health, pastes, pools, runs, sets
+from arena_wizard.api import adjustments, health, pastes, pools, runs, sets
 from arena_wizard.auth import google
 from arena_wizard.auth import routes as auth_routes
 from arena_wizard.auth.routes import LOCAL_USER, Delisted, delisted_response
@@ -228,7 +228,7 @@ def create_app(
     }
     for exception, handler in handlers.items():
         app.add_exception_handler(exception, handler)
-    for module in (health, auth_routes, sets, pools, runs, pastes):
+    for module in (health, auth_routes, sets, pools, runs, pastes, adjustments):
         app.include_router(module.router)
 
     @app.api_route(

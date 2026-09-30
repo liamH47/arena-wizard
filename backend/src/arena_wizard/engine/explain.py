@@ -217,6 +217,14 @@ def _points(value: float) -> str:
 
 def value_line(value: CardValue) -> str:
     """One card's value, what it rests on, and how sure it is, for event mode."""
+    return _value_line(value) + (
+        f"; adjusted {value.adjustment[0]:+.1f} by {value.adjustment[1]}"
+        if value.adjustment
+        else ""
+    )
+
+
+def _value_line(value: CardValue) -> str:
     head = f"{value.name}: {_points(value.q)} ±{value.se:.1f}"
     grades = ", ".join(f"{label} {raw}" for label, raw in value.grades)
     if value.basis in (ValueBasis.WIN_RATES, ValueBasis.DRAFT_PROXY):

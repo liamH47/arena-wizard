@@ -50,6 +50,7 @@ class CardValue:
     basis: ValueBasis = ValueBasis.WIN_RATES
     layers: tuple[LayerShare, ...] = ()
     grades: tuple[tuple[str, str], ...] = ()
+    adjustment: tuple[float, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)

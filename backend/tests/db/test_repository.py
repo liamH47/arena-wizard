@@ -13,6 +13,7 @@ from sqlalchemy.orm import ORMExecuteState, Session, sessionmaker
 from arena_wizard.db import repository
 from arena_wizard.db.models import (
     BuildRow,
+    CardAdjustmentLog,
     DeckRow,
     DeckRunRow,
     PasteDeletion,
@@ -633,3 +634,25 @@ def test_only_whoever_pasted_or_the_owner_may_delete_a_paste(session: Session) -
         repository.delete_paste_row(session, CARD_KEY, "bob", False, LATER)
     assert _count(session, PasteRow) == 1 and _count(session, PasteDeletion) == 0
     assert repository.delete_paste_row(session, CARD_KEY, "bob", True, LATER)
+
+
+def test_an_adjustment_is_logged_once_per_change_and_names_who_made_it(session: Session) -> None:
+    def log() -> list[tuple[str, str]]:
+        rows = session.scalars(select(CardAdjustmentLog).order_by(CardAdjustmentLog.id))
+        return [(r.action, r.changed_by) for r in rows]
+
+    assert repository.set_adjustment(session, "FRA", "A", "add", None, "", "alice", NOW)
+    assert not repository.set_adjustment(session, "FRA", "A", "add", None, "", "bob", LATER)
+    assert repository.set_adjustment(session, "FRA", "A", None, 1.5, "late game", "bob", LATER)
+    assert [a.by for a in repository.list_adjustments(session, "FRA")] == ["Bob"]
+    assert repository.list_adjustments(session, "HOB") == []
+    assert repository.clear_adjustment(session, "FRA", "A", "alice", LATER)
+    assert not repository.clear_adjustment(session, "FRA", "A", "alice", LATER)
+    assert repository.list_adjustments(session, "FRA") == []
+    assert log() == [("set", "alice"), ("set", "bob"), ("clear", "alice")]
+
+
+def test_an_adjuster_without_a_display_name_is_named_by_their_email(session: Session) -> None:
+    repository.upsert_user(session, "carol", "carol@example.com", "", "", NOW)
+    repository.set_adjustment(session, "FRA", "A", "remove", None, "", "carol", NOW)
+    assert repository.list_adjustments(session, "FRA")[0].by == "carol"

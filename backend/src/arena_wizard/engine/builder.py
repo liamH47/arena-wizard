@@ -23,6 +23,7 @@ from arena_wizard.domain.decks import CardValue, ScoredDeck
 from arena_wizard.domain.pool import Pool, PoolEntry
 from arena_wizard.domain.scoring import ScoringConfig
 from arena_wizard.domain.stats import Snapshot
+from arena_wizard.engine.adjust import Adjustment, apply_adjustments
 from arena_wizard.engine.bombs import CuratedBomb, bomb_scores, bombs
 from arena_wizard.engine.castability import shortfall
 from arena_wizard.engine.event_values import DataLayer, event_value
@@ -132,6 +133,7 @@ def prepare_event_inputs(
     config: ScoringConfig,
     curated: tuple[CuratedBomb, ...] = (),
     automatic: Mapping[str, float] = MappingProxyType({}),
+    adjustments: Sequence[Adjustment] = (),
 ) -> BuildInputs:
     """Value a pool without the public Sealed file (decisions 0007, 0010). Pure.
 
@@ -143,6 +145,7 @@ def prepare_event_inputs(
         config: The scoring configuration.
         curated: The group's curated bomb list.
         automatic: Automatic bomb scores from pasted win rates (`event_bomb_scores`).
+        adjustments: The group's adjustments, applied over everything else.
 
     Returns:
         The inputs for `build_decks`, listing at most `config.event.max_decks` decks.
@@ -154,10 +157,16 @@ def prepare_event_inputs(
         entry.card.front_name: event_value(entry.card, grades, proxy, direct, config)
         for entry in pool.entries
     }
+    values, adjusted_bombs = apply_adjustments(
+        values,
+        bombs(automatic, config.bombs.threshold, curated),
+        adjustments,
+        config.bombs.threshold,
+    )
     return BuildInputs(
         values=values,
         pairs={pair_code(p): pair_value(pair_code(p), None, None, config) for p in PAIRS},
-        bombs=bombs(automatic, config.bombs.threshold, curated),
+        bombs=adjusted_bombs,
         config=config,
         max_decks=config.event.max_decks,
     )

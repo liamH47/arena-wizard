@@ -302,6 +302,10 @@ def test_each_value_line_says_what_the_value_rests_on() -> None:
     assert value_line(_event_value("A", -0.6, ValueBasis.RARITY, source="common average")) == (
         "A: -0.6 ±3.0, common average (no win rates or grade for this card)"
     )
+    adjusted = dataclasses.replace(
+        _event_value("A", 1.5, ValueBasis.GRADES), adjustment=(2.0, "Bob")
+    )
+    assert value_line(adjusted).endswith("; adjusted +2.0 by Bob")
 
 
 def _event_sentences(

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 MAX_EXPORT_CHARS = 200_000
 MAX_PASTE_CHARS = 5_000_000
@@ -90,3 +90,17 @@ class PasteCreate(BaseModel):
 def dump(model: BaseModel) -> dict[str, Any]:
     """A body as plain JSON values, for hashing."""
     return model.model_dump(mode="json")
+
+
+class AdjustmentSet(BaseModel):
+    """A card's adjustment: add or remove it as a bomb, nudge its value, or both."""
+
+    bomb: Literal["add", "remove"] | None = None
+    q_delta: float | None = Field(default=None, ge=-10, le=10)
+    note: StorableText = Field(default="", max_length=500)
+
+    @model_validator(mode="after")
+    def _says_something(self) -> Self:
+        if self.bomb is None and not self.q_delta:
+            raise ValueError("an adjustment needs a bomb change or a non-zero value change")
+        return self

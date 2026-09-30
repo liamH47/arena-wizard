@@ -215,3 +215,35 @@ class PasteDeletion(Base):
     pasted_by: Mapped[str] = mapped_column(String(255))
     deleted_by: Mapped[str] = mapped_column(ForeignKey("users.user_id", ondelete="RESTRICT"))
     deleted_at: Mapped[dt.datetime] = mapped_column(UTCDateTime)
+
+
+class CardAdjustmentRow(Base):
+    """The group's current adjustment to one card (decision 0011)."""
+
+    __tablename__ = "card_adjustments"
+    __table_args__ = (UniqueConstraint("set_code", "name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    set_code: Mapped[str] = mapped_column(String(8))
+    name: Mapped[str] = mapped_column(String(255))
+    bomb: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    q_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    updated_by: Mapped[str] = mapped_column(ForeignKey("users.user_id", ondelete="RESTRICT"))
+    updated_at: Mapped[dt.datetime] = mapped_column(UTCDateTime)
+
+
+class CardAdjustmentLog(Base):
+    """Every set or clear of an adjustment, append-only, so edits stay attributable."""
+
+    __tablename__ = "card_adjustment_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    set_code: Mapped[str] = mapped_column(String(8))
+    name: Mapped[str] = mapped_column(String(255))
+    action: Mapped[str] = mapped_column(String(8))
+    bomb: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    q_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    changed_by: Mapped[str] = mapped_column(ForeignKey("users.user_id", ondelete="RESTRICT"))
+    changed_at: Mapped[dt.datetime] = mapped_column(UTCDateTime)

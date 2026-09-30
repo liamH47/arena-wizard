@@ -29,6 +29,7 @@ from arena_wizard.domain.sets import (
     load_set_config,
     packaged_set_codes,
 )
+from arena_wizard.engine.adjust import Adjustment
 from arena_wizard.engine.bombs import load_curated
 from arena_wizard.engine.explain import arena_list
 from arena_wizard.engine.export_parser import parse_export
@@ -100,14 +101,21 @@ def package_digest() -> str:
     return tree_digest(resources.files("arena_wizard"))
 
 
-def inputs_key(pool: Pool, pastes: Sequence[StoredPaste], today: dt.date) -> str:
+def inputs_key(
+    pool: Pool,
+    pastes: Sequence[StoredPaste],
+    today: dt.date,
+    adjustments: Sequence[Adjustment] = (),
+) -> str:
     """Everything that can change a build: the pool, every paste as stored (rows, parser
-    version, dates), the package, and whether the set's embargo has passed."""
+    version, dates), the group's adjustments, the package, and whether the set's embargo
+    has passed."""
     config = load_set_config(pool.set_code)
     return _digest(
         {
             "pool": pool_hash(pool),
             "pastes": sorted(to_json(p) for p in pastes),
+            "adjustments": sorted(dataclasses.astuple(a) for a in adjustments),
             "package": package_digest(),
             "embargo_passed": today >= config.embargo_until,
         }
@@ -125,7 +133,11 @@ def covered(config: SetConfig, today: dt.date) -> frozenset[EventType]:
 
 
 def run_build(
-    pool: Pool, pastes: Sequence[StoredPaste], today: dt.date, stale: Sequence[str] = ()
+    pool: Pool,
+    pastes: Sequence[StoredPaste],
+    today: dt.date,
+    stale: Sequence[str] = (),
+    adjustments: Sequence[Adjustment] = (),
 ) -> tuple[str, EventResult, str]:
     """Rank a pool's decks from the group's pastes.
 
@@ -134,6 +146,7 @@ def run_build(
         pastes: The set's current pastes.
         today: The UTC day.
         stale: Messages for pastes left out because an older parser stored them.
+        adjustments: The group's card adjustments for the set.
 
     Returns:
         The mode ("event" until milestone 4), the result, and the config version.
@@ -152,6 +165,7 @@ def run_build(
         today,
         False,
         web=True,
+        adjustments=adjustments,
     )
     notes = tuple(f"  Not used     {message}." for message in stale)
     result = dataclasses.replace(result, data_lines=result.data_lines + notes)
@@ -197,6 +211,9 @@ def deck_payload(deck: ScoredDeck) -> dict[str, Any]:
                 "source": v.source,
                 "layers": [{"name": layer.name, "share": layer.share} for layer in v.layers],
                 "grades": [{"source": s, "grade": g} for s, g in v.grades],
+                "adjustment": (
+                    {"q_delta": v.adjustment[0], "by": v.adjustment[1]} if v.adjustment else None
+                ),
             }
             for v in deck.values
         ],

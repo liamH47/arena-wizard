@@ -18,6 +18,7 @@ from arena_wizard.domain.pool import Pool
 from arena_wizard.domain.scoring import EventScoring, ScoringConfig
 from arena_wizard.domain.sets import EventType, SetConfig
 from arena_wizard.domain.stats import Snapshot
+from arena_wizard.engine.adjust import Adjustment
 from arena_wizard.engine.bombs import CuratedBomb, event_bomb_scores
 from arena_wizard.engine.builder import build_decks, prepare_event_inputs
 from arena_wizard.engine.event_values import DataLayer, data_layer
@@ -294,6 +295,7 @@ def event_result(
     today: dt.date,
     public_embargoed: bool,
     web: bool = False,
+    adjustments: Sequence[Adjustment] = (),
 ) -> EventResult:
     """Rank decks in event mode. Pure: the CLI prints the result, the web app stores it."""
     scores = grade_scores(grade_inputs(sources.grades), rarity_of)
@@ -323,7 +325,9 @@ def event_result(
     if scores is None and proxy is None and direct is None:
         return EventResult(lines, (), NO_VALUES.format(code=config.code))
     automatic = {name: score for name, (score, _) in scored.items()}
-    inputs = prepare_event_inputs(pool, scores, proxy, direct, scoring, curated, automatic)
+    inputs = prepare_event_inputs(
+        pool, scores, proxy, direct, scoring, curated, automatic, adjustments
+    )
     labels = {n: f"automatic, from {src}" for n, src in flagged.items()} | {
         c.name: "the group's list" for c in curated if c.action == "add"
     }

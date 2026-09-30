@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session
 
 from arena_wizard.db.models import (
     BuildRow,
+    CardAdjustmentLog,
+    CardAdjustmentRow,
     DeckRow,
     DeckRunRow,
     PasteDeletion,
@@ -30,6 +32,7 @@ from arena_wizard.db.models import (
     User,
 )
 from arena_wizard.domain.sets import EventType
+from arena_wizard.engine.adjust import Adjustment
 from arena_wizard.pastes.parsers import PARSER_VERSION, CardDataRow, GradeRow
 from arena_wizard.pastes.sources import GRADES
 from arena_wizard.pastes.store import PasteKey, StoredPaste
@@ -629,3 +632,100 @@ def delete_paste_row(
     session.delete(row)
     session.commit()
     return True
+
+
+# ---- card adjustments -------------------------------------------------------------------
+
+
+def adjustment_rows(session: Session, set_code: str) -> list[tuple[CardAdjustmentRow, str]]:
+    """A set's adjustments by card name, each with the name of who last changed it."""
+    rows = session.execute(
+        select(CardAdjustmentRow, User)
+        .join(User, User.user_id == CardAdjustmentRow.updated_by)
+        .where(CardAdjustmentRow.set_code == set_code)
+        .order_by(CardAdjustmentRow.name)
+    )
+    return [(row, user.name or user.email.split("@")[0]) for row, user in rows]
+
+
+def list_adjustments(session: Session, set_code: str) -> list[Adjustment]:
+    """A set's adjustments as the engine applies them."""
+    return [
+        Adjustment(r.name, r.bomb, r.q_delta, r.note, by)
+        for r, by in adjustment_rows(session, set_code)
+    ]
+
+
+def set_adjustment(
+    session: Session,
+    set_code: str,
+    name: str,
+    bomb: str | None,
+    q_delta: float | None,
+    note: str,
+    user_id: str,
+    now: dt.datetime,
+) -> bool:
+    """Set a card's adjustment and log it; False when nothing changed. Last writer wins."""
+    row = session.scalars(
+        select(CardAdjustmentRow).where(
+            CardAdjustmentRow.set_code == set_code, CardAdjustmentRow.name == name
+        )
+    ).first()
+    if row is not None and (row.bomb, row.q_delta, row.note) == (bomb, q_delta, note):
+        return False
+    if row is None:
+        row = CardAdjustmentRow(set_code=set_code, name=name)
+        session.add(row)
+    row.bomb, row.q_delta, row.note, row.updated_by, row.updated_at = (
+        bomb,
+        q_delta,
+        note,
+        user_id,
+        now,
+    )
+    _log(session, set_code, name, "set", bomb, q_delta, note, user_id, now)
+    session.commit()
+    return True
+
+
+def clear_adjustment(
+    session: Session, set_code: str, name: str, user_id: str, now: dt.datetime
+) -> bool:
+    """Remove a card's adjustment and log it; False when there was none."""
+    row = session.scalars(
+        select(CardAdjustmentRow).where(
+            CardAdjustmentRow.set_code == set_code, CardAdjustmentRow.name == name
+        )
+    ).first()
+    if row is None:
+        return False
+    session.delete(row)
+    _log(session, set_code, name, "clear", None, None, "", user_id, now)
+    session.commit()
+    return True
+
+
+def _log(
+    session: Session,
+    set_code: str,
+    name: str,
+    action: str,
+    bomb: str | None,
+    q_delta: float | None,
+    note: str,
+    user_id: str,
+    now: dt.datetime,
+) -> None:
+    session.add(
+        CardAdjustmentLog(
+            set_code=set_code,
+            name=name,
+            action=action,
+            bomb=bomb,
+            q_delta=q_delta,
+            note=note,
+            changed_by=user_id,
+            changed_at=now,
+        )
+    )
