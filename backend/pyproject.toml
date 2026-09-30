@@ -32,8 +32,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "D"]
-# D205/D209 police docstring layout. The rule that matters here is that every module,
-# class, and function HAS a docstring, which the rest of "D" enforces.
+# D205/D209 police docstring layout. "D" requires docstrings on public modules, classes,
+# and functions; private `_helpers` are exempt by design (CLAUDE.md, Conciseness).
 ignore = ["D205", "D209"]
 
 [tool.ruff.lint.pydocstyle]
