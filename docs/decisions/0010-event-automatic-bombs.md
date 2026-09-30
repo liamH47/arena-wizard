@@ -5,10 +5,14 @@ list only").
 
 ## Decision
 
-- **Automatic bombs in event builds.** They come from pasted win rates: the Arena Direct
-  (or Sealed) paste first, else the Premier Draft paste. The same scoring and floors as the
-  public-file path apply (at least 150 games in hand, at least 50 qualifying cards,
-  threshold 2.0).
+- **Automatic bombs in event builds, from pasted win rates.** Each card takes its score
+  from the most direct layer with enough games for it: the Arena Direct (or Sealed) paste,
+  else the Premier Draft paste. So a thin Arena Direct paste cannot push out the draft data
+  that can see rares (sealed-analyst).
+- **A 500-game floor for pasted data** (`event.bomb_min_games`). At 150 games in hand, a
+  win rate's noise is about as large as the real spread between cards, so about half the
+  flags would be luck. The public-file path keeps 150. Both need 50 qualifying cards and a
+  threshold of 2.0.
 - **Labelled by source.** Each deck names each bomb's source ("automatic, from draft data"
   or "the group's list"), and the Data block gives the count and the source, never names.
 - **The curated list still wins.** It adds and removes over the automatic list, as before.
