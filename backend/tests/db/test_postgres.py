@@ -81,7 +81,7 @@ def test_upgrade_creates_every_table_and_downgrade_removes_them(pg_url: str) -> 
     assert _tables(pg_url) == {"alembic_version"}
     assert database_revision(pg_url) is None
     command.upgrade(alembic_config(pg_url), "head")
-    assert database_revision(pg_url) == "0001"
+    assert database_revision(pg_url) == "0002"
 
 
 def test_a_second_migrator_waits_for_the_first_to_commit(pg_url: str) -> None:
@@ -103,7 +103,7 @@ def test_a_second_migrator_waits_for_the_first_to_commit(pg_url: str) -> None:
         holder_engine.dispose()
     worker.join(timeout=30)
     assert not worker.is_alive()
-    assert database_revision(pg_url) == "0001"
+    assert database_revision(pg_url) == "0002"
 
 
 def _connections(url: str) -> int:

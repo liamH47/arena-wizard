@@ -15,10 +15,10 @@ Revises:
 
 from __future__ import annotations
 
-import os
-
 import sqlalchemy as sa
-from alembic import context, op
+from alembic import op
+
+from arena_wizard.db.migrations.guard import refuse_destructive
 
 revision = "0001"
 down_revision = None
@@ -175,21 +175,11 @@ def upgrade() -> None:
 
 
 TABLES = ("paste_deletions", "deck_runs", "decks", "builds", "pools", "pastes", "users")
-ALLOW = "ARENA_WIZARD_ALLOW_DESTRUCTIVE_DOWNGRADE"
 
 
 def downgrade() -> None:
     """Undo this migration, refusing to destroy rows unless explicitly allowed."""
-    if context.is_offline_mode():
-        raise RuntimeError("downgrade 0001 counts rows first, so it cannot run as offline SQL")
-    bind = op.get_bind()
-    counts: dict[str, int] = {
-        table: bind.execute(sa.text(f"SELECT COUNT(*) FROM {table}")).scalar_one()
-        for table in TABLES
-    }
-    rows = {t: n for t, n in counts.items() if n}
-    if rows and os.environ.get(ALLOW) != "1":
-        raise RuntimeError(f"downgrade would delete rows {rows}; set {ALLOW}=1 to allow it")
+    refuse_destructive(TABLES)
     with op.batch_alter_table("deck_runs", schema=None) as batch_op:
         batch_op.drop_index(batch_op.f("ix_deck_runs_user_id"))
         batch_op.drop_index("ix_deck_runs_deck")

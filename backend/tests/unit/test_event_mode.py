@@ -136,7 +136,7 @@ def test_with_nothing_the_data_block_lists_every_missing_source_and_its_command(
         "  Draft data   missing  Sign in to 17Lands",
         "--event-type PremierDraft --source 17lands-card-data --file PATH",
         "  Grades       missing  arena-wizard paste --set FRA --dataset grades",
-        "  Bombs        missing  The group's curated list, config/bombs/FRA.yaml, is not written",
+        "  Bombs        missing  The automatic list needs 500+ games in hand per card",
         "  Public file  missing  17Lands publishes it weeks after release",
         "17Lands asks tools not to show FRA data before 2026-10-10",
     ):
@@ -249,6 +249,24 @@ def test_win_rates_rank_decks_and_show_each_layers_weight(
     assert all(" average " in line for line in values)
 
 
+def test_draft_win_rates_with_enough_games_feed_the_automatic_list(tmp_path: Path) -> None:
+    pastes = _stored(tmp_path, (DRAFT, card_data_csv(draft=True), DAY))
+    status, lines = _build(pastes)
+    assert status == 0
+    # Made-up rates are flat, so the list is computed but no card clears the bar.
+    assert "  Bombs        used     Automatic from draft data (none reach the bomb bar)." in lines
+
+
+def test_the_bombs_line_joins_automatic_and_curated_sources() -> None:
+    nothing = Sources((), None, None, None, ())
+    curated = (CuratedBomb("X", "add", "", "group vote"),)
+    lines = data_block(FRA, EVENT, nothing, None, curated, DAY, False, auto=("Arena Direct", 3))
+    assert (
+        "  Bombs        used     Automatic from Arena Direct (3 cards); the group's curated "
+        "list (1 cards)." in lines
+    )
+
+
 def test_a_pool_too_small_for_any_deck_says_so(tmp_path: Path) -> None:
     pastes = _stored(tmp_path, (request(), grades_csv(), DAY))
     status, lines = _build(pastes, _fra_pool_text(size=5))
@@ -282,6 +300,6 @@ def test_a_curated_list_names_its_bombs_in_the_decks(tmp_path: Path) -> None:
         lines.append,
     )
     assert status == 0
-    assert any(line.startswith("  Bombs: ") and "(the group's curated list)" in line
+    assert any(line.startswith("  Bombs: ") and "(the group's list)" in line
                for line in lines)  # fmt: skip
     assert ValueBasis.GRADES.value == "grades"

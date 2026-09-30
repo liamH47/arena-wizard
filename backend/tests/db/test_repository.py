@@ -13,6 +13,7 @@ from sqlalchemy.orm import ORMExecuteState, Session, sessionmaker
 from arena_wizard.db import repository
 from arena_wizard.db.models import (
     BuildRow,
+    CardAdjustmentLog,
     DeckRow,
     DeckRunRow,
     PasteDeletion,
@@ -633,3 +634,64 @@ def test_only_whoever_pasted_or_the_owner_may_delete_a_paste(session: Session) -
         repository.delete_paste_row(session, CARD_KEY, "bob", False, LATER)
     assert _count(session, PasteRow) == 1 and _count(session, PasteDeletion) == 0
     assert repository.delete_paste_row(session, CARD_KEY, "bob", True, LATER)
+
+
+def test_an_adjustment_is_logged_once_per_change_and_names_who_made_it(session: Session) -> None:
+    def log() -> list[tuple[str, str]]:
+        rows = session.scalars(select(CardAdjustmentLog).order_by(CardAdjustmentLog.id))
+        return [(r.action, r.changed_by) for r in rows]
+
+    assert repository.set_adjustment(session, "FRA", "A", "add", None, "", "alice", NOW)
+    assert not repository.set_adjustment(session, "FRA", "A", "add", None, "", "bob", LATER)
+    assert repository.set_adjustment(session, "FRA", "A", None, 1.5, "late game", "bob", LATER)
+    (stored,) = repository.list_adjustments(session, "FRA")
+    assert (stored.bomb, stored.q_delta, stored.note, stored.by) == (None, 1.5, "late game", "Bob")
+    assert repository.set_adjustment(session, "FRA", "A", None, 1.5, "early too", "bob", LATER)
+    assert repository.list_adjustments(session, "FRA")[0].note == "early too"
+    assert repository.list_adjustments(session, "HOB") == []
+    assert repository.clear_adjustment(session, "FRA", "A", "alice", LATER)
+    assert not repository.clear_adjustment(session, "FRA", "A", "alice", LATER)
+    assert repository.list_adjustments(session, "FRA") == []
+    assert log() == [("set", "alice"), ("set", "bob"), ("set", "bob"), ("clear", "alice")]
+
+
+def test_an_adjuster_without_a_display_name_is_named_by_their_email(session: Session) -> None:
+    repository.upsert_user(session, "carol", "carol@example.com", "", "", NOW)
+    repository.set_adjustment(session, "FRA", "A", "remove", None, "", "carol", NOW)
+    assert repository.list_adjustments(session, "FRA")[0].by == "carol"
+
+
+def _adjustment_log(session: Session) -> list[tuple[str, str]]:
+    rows = session.scalars(select(CardAdjustmentLog).order_by(CardAdjustmentLog.id))
+    return [(r.action, r.changed_by) for r in rows]
+
+
+def test_a_first_adjustment_that_lost_an_insert_race_still_wins_as_the_last_writer(
+    session: Session, sessions: sessionmaker[Session]
+) -> None:
+    _race(session, sessions, lambda other: repository.set_adjustment(
+        other, "FRA", "A", "add", None, "", "bob", NOW))  # fmt: skip
+    assert repository.set_adjustment(session, "FRA", "A", None, 1.5, "", "alice", LATER)
+    (stored,) = repository.list_adjustments(session, "FRA")
+    assert (stored.bomb, stored.q_delta, stored.by) == (None, 1.5, "Alice")
+    assert _adjustment_log(session) == [("set", "bob"), ("set", "alice")]
+
+
+def test_an_adjustment_cleared_while_it_was_being_changed_is_set_again(
+    session: Session, sessions: sessionmaker[Session]
+) -> None:
+    repository.set_adjustment(session, "FRA", "A", "add", None, "", "alice", NOW)
+    _race_before_update(session, sessions, lambda other: repository.clear_adjustment(
+        other, "FRA", "A", "bob", NOW))  # fmt: skip
+    assert repository.set_adjustment(session, "FRA", "A", "remove", None, "", "alice", LATER)
+    assert [a.bomb for a in repository.list_adjustments(session, "FRA")] == ["remove"]
+    assert _adjustment_log(session) == [("set", "alice"), ("clear", "bob"), ("set", "alice")]
+
+
+def test_an_adjustment_that_loses_its_retry_too_is_a_conflict(
+    session: Session, sessions: sessionmaker[Session]
+) -> None:
+    _race(session, sessions, lambda other: repository.set_adjustment(
+        other, "FRA", "A", "add", None, "", "bob", NOW))  # fmt: skip
+    with pytest.raises(IntegrityError):
+        repository.set_adjustment(session, "FRA", "A", "remove", None, "", "alice", NOW, False)

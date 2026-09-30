@@ -7,10 +7,18 @@ from typing import Any
 import pytest
 
 from arena_wizard.domain.cards import Rarity
-from arena_wizard.domain.scoring import BombRules
-from arena_wizard.domain.sets import ConfigError
-from arena_wizard.domain.stats import CardCounts
-from arena_wizard.engine.bombs import CuratedBomb, bomb_scores, bombs, load_curated, parse_curated
+from arena_wizard.domain.scoring import BombRules, load_scoring_config
+from arena_wizard.domain.sets import ConfigError, Format
+from arena_wizard.domain.stats import CardCounts, Snapshot, SourceRef
+from arena_wizard.engine.bombs import (
+    CuratedBomb,
+    bomb_scores,
+    bombs,
+    event_bomb_scores,
+    load_curated,
+    parse_curated,
+)
+from arena_wizard.engine.event_values import DataLayer, data_layer
 from arena_wizard.engine.values import FormatMeans
 
 C, RARE = Rarity.COMMON, Rarity.RARE
@@ -173,3 +181,36 @@ def test_curated_entries_add_remove_and_annotate() -> None:
 def test_without_not_seen_games_there_are_no_automatic_bombs() -> None:
     no_gns = FormatMeans(gih=0.5, gih_by_rarity={C: 0.5}, gns_by_rarity={}, iwd=None, pair=None)
     assert bomb_scores(THREE, RARITIES, no_gns, RULES, 10, 10) == {}
+
+
+def _layer(name: str, games: dict[str, int]) -> DataLayer:
+    counts = {n: CardCounts(g, g // 2 + i, g, g // 2) for i, (n, g) in enumerate(games.items())}
+    snapshot = Snapshot("T", SourceRef(name, None, None, None, 0), counts, {})
+    layer = data_layer(name, snapshot, dict.fromkeys(counts, C), proxy=False)
+    assert layer is not None
+    return layer
+
+
+RICH = {f"C{i}": 600 for i in range(60)}
+THIN = {f"C{i}": 600 if i < 55 else 200 for i in range(60)}
+
+
+@pytest.mark.parametrize(
+    ("layers", "expected"),
+    [
+        # Each card takes the most direct layer with enough games for it.
+        ((("Arena Direct", RICH), ("draft data", RICH)), {"Arena Direct": 60}),
+        ((("Arena Direct", THIN), ("draft data", RICH)), {"Arena Direct": 55, "draft data": 5}),
+        ((("Arena Direct", {n: 200 for n in RICH}), ("draft data", RICH)), {"draft data": 60}),
+        # Below the pasted-data floor of 500 games, nothing qualifies.
+        ((("Arena Direct", {n: 200 for n in RICH}),), {}),
+        ((), {}),
+    ],
+)
+def test_event_bomb_scores_take_each_card_from_the_most_direct_layer_that_qualifies(
+    layers: tuple[tuple[str, dict[str, int]], ...], expected: dict[str, int]
+) -> None:
+    config = load_scoring_config(Format.BO1_SEALED)
+    scored = event_bomb_scores([_layer(*spec) for spec in layers], dict.fromkeys(RICH, C), config)
+    sources = [source for _, source in scored.values()]
+    assert {s: sources.count(s) for s in set(sources)} == expected

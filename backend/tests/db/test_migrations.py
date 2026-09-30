@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import io
 from contextlib import redirect_stdout
 from importlib import resources
@@ -13,6 +14,7 @@ from alembic.migration import MigrationContext
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
+from arena_wizard.db import repository
 from arena_wizard.db.models import Base
 from arena_wizard.db.session import make_engine
 from arena_wizard.entrypoint import alembic_config
@@ -26,6 +28,8 @@ TABLES = {
     "deck_runs",
     "pastes",
     "paste_deletions",
+    "card_adjustments",
+    "card_adjustment_log",
     "alembic_version",
 }
 
@@ -64,12 +68,27 @@ def test_a_downgrade_that_would_delete_rows_is_refused_unless_allowed(
 ) -> None:
     session.close()
     monkeypatch.delenv(ALLOW, raising=False)
+    command.downgrade(alembic_config(db_url), "0001")  # no adjustments, so allowed
     with pytest.raises(RuntimeError, match=r"would delete rows \{'users': 2\}"):
         command.downgrade(alembic_config(db_url), "base")
-    assert _tables(db_url) == TABLES
+    assert _tables(db_url) == TABLES - {"card_adjustments", "card_adjustment_log"}
     monkeypatch.setenv(ALLOW, "1")
     command.downgrade(alembic_config(db_url), "base")
     assert _tables(db_url) == {"alembic_version"}
+
+
+def test_downgrading_0002_refuses_to_drop_adjustments_unless_allowed(
+    db_url: str, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = dt.datetime(2026, 10, 1, tzinfo=dt.UTC)
+    repository.set_adjustment(session, "HOB", "A Card", "add", None, "", "alice", now)
+    session.close()
+    monkeypatch.delenv(ALLOW, raising=False)
+    with pytest.raises(RuntimeError, match=r"'card_adjustments': 1, 'card_adjustment_log': 1"):
+        command.downgrade(alembic_config(db_url), "0001")
+    monkeypatch.setenv(ALLOW, "1")
+    command.downgrade(alembic_config(db_url), "0001")
+    assert _tables(db_url) == TABLES - {"card_adjustments", "card_adjustment_log"}
 
 
 def test_offline_mode_writes_the_sql_without_a_database(tmp_path: Path) -> None:
@@ -99,7 +118,7 @@ def test_the_revision_is_recorded(db_url: str) -> None:
     engine = make_engine(db_url)
     with engine.connect() as connection:
         assert (
-            connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0001"
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0002"
         )
     engine.dispose()
 

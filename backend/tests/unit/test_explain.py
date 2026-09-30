@@ -4,6 +4,8 @@ import dataclasses
 import datetime as dt
 from collections.abc import Collection, Mapping
 
+import pytest
+
 from arena_wizard.domain.decks import (
     CardValue,
     LandEntry,
@@ -300,22 +302,57 @@ def test_each_value_line_says_what_the_value_rests_on() -> None:
     assert value_line(_event_value("A", -0.6, ValueBasis.RARITY, source="common average")) == (
         "A: -0.6 ±3.0, common average (no win rates or grade for this card)"
     )
+    adjusted = dataclasses.replace(
+        _event_value("A", 1.5, ValueBasis.GRADES), adjustment=(2.0, "Bob")
+    )
+    assert value_line(adjusted).endswith("; adjusted +2.0 by Bob")
 
 
 def _event_sentences(
-    *decks: ScoredDeck, bombs: Mapping[str, float] | None = None, curated: bool = True
+    *decks: ScoredDeck,
+    bombs: Mapping[str, float] | None = None,
+    labels: Mapping[str, str] | None = None,
+    assessed: frozenset[str] | None = None,
 ) -> list[tuple[str, ...]]:
-    return [d.explanations for d in describe_event(decks, bombs or {}, curated)]
+    return [d.explanations for d in describe_event(decks, bombs or {}, labels or {}, assessed, 500)]
 
 
-def test_event_bombs_are_not_assessed_without_a_curated_list() -> None:
-    deck = _event_deck({"A": (1.0, ValueBasis.GRADES)})
-    ((_, bombs),) = _event_sentences(deck, curated=False)
-    assert bombs.startswith("Bombs: not assessed.")
-    ((_, none),) = _event_sentences(deck)
-    assert none == "Bombs: none from the group's curated list."
-    ((_, named),) = _event_sentences(deck, bombs={"A": 1.0})
-    assert named == "Bombs: A (the group's curated list)."
+AUTO = {"A": "automatic, from draft data"}
+
+
+@pytest.mark.parametrize(
+    ("spells", "bombs", "labels", "assessed", "sentence"),
+    [
+        ("A", {}, {}, frozenset(), "Bombs: not assessed. No spell here has 500+ games in hand"),
+        ("A", {}, {}, None, "Bombs: none in this deck."),
+        ("A", {"A": 2.5}, AUTO, frozenset("A"), "Bombs: A (automatic, from draft data)."),
+        ("A", {"A": 2.5}, {"A": "the group's list"}, None, "Bombs: A (the group's list)."),
+        (
+            "AB",
+            {},
+            {},
+            frozenset("A"),
+            "Bombs: none among the spells assessed. 1 not assessed (under 500 games in hand).",
+        ),
+        (
+            "AB",
+            {"A": 2.5},
+            AUTO,
+            frozenset("A"),
+            "Bombs: A (automatic, from draft data). 1 not assessed (under 500 games in hand).",
+        ),
+    ],
+)
+def test_event_bombs_say_where_each_bomb_came_from_and_what_was_not_assessed(
+    spells: str,
+    bombs: dict[str, float],
+    labels: dict[str, str],
+    assessed: frozenset[str] | None,
+    sentence: str,
+) -> None:
+    deck = _event_deck({name: (1.0, ValueBasis.GRADES) for name in spells})
+    ((_, said, *_),) = _event_sentences(deck, bombs=bombs, labels=labels, assessed=assessed)
+    assert said.startswith(sentence)
 
 
 def test_the_basis_sentence_counts_each_kind_and_names_ungraded_cards() -> None:

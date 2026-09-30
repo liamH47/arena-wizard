@@ -16,12 +16,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from arena_wizard.db.models import (
     BuildRow,
+    CardAdjustmentLog,
+    CardAdjustmentRow,
     DeckRow,
     DeckRunRow,
     PasteDeletion,
@@ -30,6 +32,7 @@ from arena_wizard.db.models import (
     User,
 )
 from arena_wizard.domain.sets import EventType
+from arena_wizard.engine.adjust import Adjustment
 from arena_wizard.pastes.parsers import PARSER_VERSION, CardDataRow, GradeRow
 from arena_wizard.pastes.sources import GRADES
 from arena_wizard.pastes.store import PasteKey, StoredPaste
@@ -629,3 +632,107 @@ def delete_paste_row(
     session.delete(row)
     session.commit()
     return True
+
+
+# ---- card adjustments -------------------------------------------------------------------
+
+
+def adjustment_rows(session: Session, set_code: str) -> list[tuple[CardAdjustmentRow, str]]:
+    """A set's adjustments by card name, each with the name of who last changed it."""
+    rows = session.execute(
+        select(CardAdjustmentRow, User)
+        .join(User, User.user_id == CardAdjustmentRow.updated_by)
+        .where(CardAdjustmentRow.set_code == set_code)
+        .order_by(CardAdjustmentRow.name)
+    )
+    return [(row, user.name or user.email.split("@")[0]) for row, user in rows]
+
+
+def list_adjustments(session: Session, set_code: str) -> list[Adjustment]:
+    """A set's adjustments as the engine applies them."""
+    return [
+        Adjustment(r.name, r.bomb, r.q_delta, r.note, by)
+        for r, by in adjustment_rows(session, set_code)
+    ]
+
+
+def set_adjustment(
+    session: Session,
+    set_code: str,
+    name: str,
+    bomb: str | None,
+    q_delta: float | None,
+    note: str,
+    user_id: str,
+    now: dt.datetime,
+    retry: bool = True,
+) -> bool:
+    """Set a card's adjustment and log it; False when nothing changed. Last writer wins: a
+    write that loses a race with another friend's insert or clear is retried once."""
+    key = (CardAdjustmentRow.set_code == set_code, CardAdjustmentRow.name == name)
+    current = session.execute(
+        select(CardAdjustmentRow.bomb, CardAdjustmentRow.q_delta, CardAdjustmentRow.note).where(
+            *key
+        )
+    ).first()
+    if current is not None and tuple(current) == (bomb, q_delta, note):
+        return False
+    fields: dict[str, Any] = {"bomb": bomb, "q_delta": q_delta, "note": note}
+    fields |= {"updated_by": user_id, "updated_at": now}
+    try:
+        if current is None:
+            session.add(CardAdjustmentRow(set_code=set_code, name=name, **fields))
+        else:
+            updated = session.execute(update(CardAdjustmentRow).where(*key).values(**fields))
+            if updated.rowcount != 1:  # type: ignore[attr-defined]
+                raise IntegrityError("cleared since it was read", None, ValueError())
+        _log(session, set_code, name, "set", bomb, q_delta, note, user_id, now)
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        if not retry:
+            raise
+        return set_adjustment(session, set_code, name, bomb, q_delta, note, user_id, now, False)
+    return True
+
+
+def clear_adjustment(
+    session: Session, set_code: str, name: str, user_id: str, now: dt.datetime
+) -> bool:
+    """Remove a card's adjustment and log it; False, with nothing logged, when there was none."""
+    deleted = session.execute(
+        delete(CardAdjustmentRow).where(
+            CardAdjustmentRow.set_code == set_code, CardAdjustmentRow.name == name
+        )
+    )
+    if deleted.rowcount != 1:  # type: ignore[attr-defined]
+        session.rollback()
+        return False
+    _log(session, set_code, name, "clear", None, None, "", user_id, now)
+    session.commit()
+    return True
+
+
+def _log(
+    session: Session,
+    set_code: str,
+    name: str,
+    action: str,
+    bomb: str | None,
+    q_delta: float | None,
+    note: str,
+    user_id: str,
+    now: dt.datetime,
+) -> None:
+    session.add(
+        CardAdjustmentLog(
+            set_code=set_code,
+            name=name,
+            action=action,
+            bomb=bomb,
+            q_delta=q_delta,
+            note=note,
+            changed_by=user_id,
+            changed_at=now,
+        )
+    )

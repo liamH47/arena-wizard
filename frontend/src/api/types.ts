@@ -78,6 +78,7 @@ export type CardValue = {
   source: string
   layers: { name: string; share: number }[]
   grades: { source: string; grade: string }[]
+  adjustment: { q_delta: number; by: string } | null
 }
 
 export type Deck = {
@@ -110,6 +111,7 @@ export type Build = {
   id: number
   current: boolean
   pool_id: string
+  set_code: string
   mode: string
   config_version: string
   created_at: string
@@ -148,3 +150,12 @@ export type Paste = {
 }
 
 export type PasteResult = { messages: string[] }
+
+export type Adjustment = {
+  name: string
+  bomb: 'add' | 'remove' | null
+  q_delta: number | null
+  note: string
+  by: string
+  updated_at: string
+}
