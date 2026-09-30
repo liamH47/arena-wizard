@@ -230,9 +230,12 @@ def value_line(value: CardValue) -> str:
 
 
 def _event_bombs(
-    deck: ScoredDeck, bombs: Mapping[str, float], curated: frozenset[str] | None, source: str | None
+    deck: ScoredDeck,
+    bombs: Mapping[str, float],
+    curated: frozenset[str] | None,
+    origins: Mapping[str, str],
 ) -> str:
-    if curated is None and source is None:
+    if curated is None and not origins:
         return (
             "Bombs: not assessed. The automatic list needs more games in pasted win rates, "
             "and the group's curated list is not written yet."
@@ -240,11 +243,12 @@ def _event_bombs(
     names = [e.card.front_name for e in deck.spells if e.card.front_name in bombs]
     if not names:
         return "Bombs: none in this deck."
-    origin = {
-        n: "the group's list" if curated and n in curated else f"automatic, from {source}"
+    said = (
+        f"{n} (the group's list)" if curated and n in curated
+        else f"{n} (automatic, from {origins.get(n, 'win rates')})"
         for n in names
-    }
-    return "Bombs: " + "; ".join(f"{n} ({origin[n]})" for n in names) + "."
+    )  # fmt: skip
+    return "Bombs: " + "; ".join(said) + "."
 
 
 def _basis_sentence(deck: ScoredDeck) -> str:
@@ -316,7 +320,7 @@ def describe_event(
     decks: Sequence[ScoredDeck],
     bombs: Mapping[str, float],
     curated: frozenset[str] | None,
-    source: str | None = None,
+    origins: Mapping[str, str],
 ) -> tuple[ScoredDeck, ...]:
     """Attach explanations to decks valued in event mode (decision 0007). Pure.
 
@@ -326,7 +330,7 @@ def describe_event(
     described = []
     for i, deck in enumerate(decks):
         grades_only = all(v.basis in GRADE_BASES for v in deck.values)
-        sentences = [_basis_sentence(deck), _event_bombs(deck, bombs, curated, source)]
+        sentences = [_basis_sentence(deck), _event_bombs(deck, bombs, curated, origins)]
         if deck.splash is not None:
             main = [Color(c) for c in deck.colors]
             splashed = [

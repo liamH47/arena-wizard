@@ -18,16 +18,25 @@ list only").
 
 ## Evidence
 
-Automatic lists from the whole season's public files, as counts only:
+Draft-based lists at the 500-game floor, compared with the full-season Sealed list, as
+counts only (no names):
 
-| Set | From the Sealed file | From the Premier Draft file | Both |
+| Set | Draft data used | Flagged | Also on the Sealed list |
 |---|---|---|---|
-| SOS | 12 | 13 | 8 |
-| HOB | 7 | 7 | 3 |
+| SOS | 10% | 10 | 6 of 10 |
+| SOS | 100% | 13 | 7 of 10 |
+| HOB | 10% | 7 | 3 of 7 |
+| HOB | 100% | 7 | 3 of 7 |
 
-Draft data is a fair stand-in on SOS and a weak one on HOB, and early-event pastes are far
-thinner than a season. Builds therefore say which layer each bomb came from, and the
-group's list, or a card adjustment (decision 0011), overrides it.
+The list is as good on a tenth of a season as on all of it: about 60% of flags match on
+SOS and about 40% on HOB. A wrong flag costs at most 1.5 points, about 0.12 win-rate
+points. Builds say which layer each bomb came from, and the group's list, or a card
+adjustment (decision 0011), overrides it.
+
+## Not adopted
+
+- **A higher threshold for draft data on HOB** (sealed-analyst): set-specific, and FRA is
+  the target; revisit with FRA's first public file.
 
 ## Eval
 

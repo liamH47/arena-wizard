@@ -231,8 +231,9 @@ def _data_block(
         lines.append(f"  Bombs        used     {text[0].upper()}{text[1:]}.")
     else:
         lines.append(
-            "  Bombs        missing  The automatic list needs at least 150 games per card in "
-            f"pasted win rates; the group's list, config/bombs/{code}.yaml, is not written."
+            f"  Bombs        missing  The automatic list needs {event.bomb_min_games}+ games in "
+            f"hand per card in pasted win rates; the group's list, config/bombs/{code}.yaml, "
+            "is not written."
         )
     status = "embargoed" if public_embargoed else "missing"
     lines.append(
@@ -308,10 +309,12 @@ def event_result(
         else None
     )
     layers = [layer for layer in (direct, proxy) if layer is not None]
-    automatic, source = event_bomb_scores(layers, rarity_of, scoring)
-    auto = (
-        (source, sum(s >= scoring.bombs.threshold for s in automatic.values())) if source else None
-    )
+    scored = event_bomb_scores(layers, rarity_of, scoring)
+    removed = {c.name for c in curated if c.action == "remove"}
+    flagged = {n: src for n, (s, src) in scored.items()
+               if s >= scoring.bombs.threshold and n not in removed}  # fmt: skip
+    named = [layer.name for layer in layers if layer.name in {src for _, src in scored.values()}]
+    auto = (" and ".join(named), len(flagged)) if named else None
     lines = tuple(
         data_block(
             config, scoring.event, sources, scores, curated, today, public_embargoed, web, auto
@@ -319,9 +322,10 @@ def event_result(
     )
     if scores is None and proxy is None and direct is None:
         return EventResult(lines, (), NO_VALUES.format(code=config.code))
+    automatic = {name: score for name, (score, _) in scored.items()}
     inputs = prepare_event_inputs(pool, scores, proxy, direct, scoring, curated, automatic)
     listed = frozenset(c.name for c in curated if c.action == "add") if curated else None
-    decks = describe_event(build_decks(pool, inputs).decks, inputs.bombs, listed, source)
+    decks = describe_event(build_decks(pool, inputs).decks, inputs.bombs, listed, flagged)
     return EventResult(lines, decks, None if decks else NO_DECK)
 
 

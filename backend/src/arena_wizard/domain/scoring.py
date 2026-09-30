@@ -96,6 +96,7 @@ class EventScoring:
     proxy_sigma: float
     min_grade_coverage: float
     max_decks: int
+    bomb_min_games: int
 
 
 @dataclass(frozen=True, slots=True)

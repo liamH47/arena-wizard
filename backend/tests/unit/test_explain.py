@@ -308,26 +308,28 @@ def _event_sentences(
     *decks: ScoredDeck,
     bombs: Mapping[str, float] | None = None,
     curated: frozenset[str] | None = frozenset(),
-    source: str | None = None,
+    origins: Mapping[str, str] | None = None,
 ) -> list[tuple[str, ...]]:
-    return [d.explanations for d in describe_event(decks, bombs or {}, curated, source)]
+    return [d.explanations for d in describe_event(decks, bombs or {}, curated, origins or {})]
 
 
 @pytest.mark.parametrize(
-    ("bombs", "curated", "source", "sentence"),
+    ("bombs", "curated", "origins", "sentence"),
     [
-        ({}, None, None, "Bombs: not assessed. The automatic list needs more games"),
-        ({}, frozenset(), None, "Bombs: none in this deck."),
-        ({"A": 2.0}, frozenset({"A"}), None, "Bombs: A (the group's list)."),
-        ({"A": 2.5}, None, "draft data", "Bombs: A (automatic, from draft data)."),
-        ({"A": 2.5}, frozenset({"A"}), "draft data", "Bombs: A (the group's list)."),
+        ({}, None, {}, "Bombs: not assessed. The automatic list needs more games"),
+        ({}, frozenset(), {}, "Bombs: none in this deck."),
+        ({"A": 2.5}, None, {"A": "draft data"}, "Bombs: A (automatic, from draft data)."),
+        ({"A": 2.5}, frozenset({"A"}), {"A": "draft data"}, "Bombs: A (the group's list)."),
     ],
 )
 def test_event_bombs_say_where_each_bomb_came_from(
-    bombs: dict[str, float], curated: frozenset[str] | None, source: str | None, sentence: str
+    bombs: dict[str, float],
+    curated: frozenset[str] | None,
+    origins: dict[str, str],
+    sentence: str,
 ) -> None:
     deck = _event_deck({"A": (1.0, ValueBasis.GRADES)})
-    ((_, said),) = _event_sentences(deck, bombs=bombs, curated=curated, source=source)
+    ((_, said),) = _event_sentences(deck, bombs=bombs, curated=curated, origins=origins)
     assert said.startswith(sentence)
 
 

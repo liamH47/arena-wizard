@@ -136,7 +136,7 @@ def test_with_nothing_the_data_block_lists_every_missing_source_and_its_command(
         "  Draft data   missing  Sign in to 17Lands",
         "--event-type PremierDraft --source 17lands-card-data --file PATH",
         "  Grades       missing  arena-wizard paste --set FRA --dataset grades",
-        "  Bombs        missing  The automatic list needs at least 150 games per card",
+        "  Bombs        missing  The automatic list needs 500+ games in hand per card",
         "  Public file  missing  17Lands publishes it weeks after release",
         "17Lands asks tools not to show FRA data before 2026-10-10",
     ):
