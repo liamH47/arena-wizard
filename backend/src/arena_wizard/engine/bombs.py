@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from importlib.resources.abc import Traversable
@@ -22,9 +22,10 @@ from typing import Any
 import yaml
 
 from arena_wizard.domain.cards import Rarity
-from arena_wizard.domain.scoring import BombRules
+from arena_wizard.domain.scoring import BombRules, ScoringConfig
 from arena_wizard.domain.sets import ConfigError
 from arena_wizard.domain.stats import CardCounts
+from arena_wizard.engine.event_values import DataLayer
 from arena_wizard.engine.values import FormatMeans, shrink
 
 PROVENANCE = re.compile(r"own|permission \d{4}")
@@ -154,3 +155,21 @@ def bombs(
         elif entry.action == "remove":
             result.pop(entry.name, None)
     return result
+
+
+def event_bomb_scores(
+    layers: Sequence[DataLayer], rarity_of: Mapping[str, Rarity], config: ScoringConfig
+) -> tuple[dict[str, float], str | None]:
+    """Automatic bomb scores from the first layer with enough games, and that layer's name."""
+    for layer in layers:
+        scores = bomb_scores(
+            layer.snapshot.cards,
+            rarity_of,
+            layer.means,
+            config.bombs,
+            config.shrinkage.prior_games,
+            config.shrinkage.iwd_prior_games,
+        )
+        if scores:
+            return scores, layer.name
+    return {}, None

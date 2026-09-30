@@ -4,6 +4,8 @@ import dataclasses
 import datetime as dt
 from collections.abc import Collection, Mapping
 
+import pytest
+
 from arena_wizard.domain.decks import (
     CardValue,
     LandEntry,
@@ -303,19 +305,30 @@ def test_each_value_line_says_what_the_value_rests_on() -> None:
 
 
 def _event_sentences(
-    *decks: ScoredDeck, bombs: Mapping[str, float] | None = None, curated: bool = True
+    *decks: ScoredDeck,
+    bombs: Mapping[str, float] | None = None,
+    curated: frozenset[str] | None = frozenset(),
+    source: str | None = None,
 ) -> list[tuple[str, ...]]:
-    return [d.explanations for d in describe_event(decks, bombs or {}, curated)]
+    return [d.explanations for d in describe_event(decks, bombs or {}, curated, source)]
 
 
-def test_event_bombs_are_not_assessed_without_a_curated_list() -> None:
+@pytest.mark.parametrize(
+    ("bombs", "curated", "source", "sentence"),
+    [
+        ({}, None, None, "Bombs: not assessed. The automatic list needs more games"),
+        ({}, frozenset(), None, "Bombs: none in this deck."),
+        ({"A": 2.0}, frozenset({"A"}), None, "Bombs: A (the group's list)."),
+        ({"A": 2.5}, None, "draft data", "Bombs: A (automatic, from draft data)."),
+        ({"A": 2.5}, frozenset({"A"}), "draft data", "Bombs: A (the group's list)."),
+    ],
+)
+def test_event_bombs_say_where_each_bomb_came_from(
+    bombs: dict[str, float], curated: frozenset[str] | None, source: str | None, sentence: str
+) -> None:
     deck = _event_deck({"A": (1.0, ValueBasis.GRADES)})
-    ((_, bombs),) = _event_sentences(deck, curated=False)
-    assert bombs.startswith("Bombs: not assessed.")
-    ((_, none),) = _event_sentences(deck)
-    assert none == "Bombs: none from the group's curated list."
-    ((_, named),) = _event_sentences(deck, bombs={"A": 1.0})
-    assert named == "Bombs: A (the group's curated list)."
+    ((_, said),) = _event_sentences(deck, bombs=bombs, curated=curated, source=source)
+    assert said.startswith(sentence)
 
 
 def test_the_basis_sentence_counts_each_kind_and_names_ungraded_cards() -> None:

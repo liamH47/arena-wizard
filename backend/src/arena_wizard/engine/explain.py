@@ -229,16 +229,22 @@ def value_line(value: CardValue) -> str:
     return f"{head}, {value.source} (no win rates or grade for this card)"
 
 
-def _event_bombs(deck: ScoredDeck, bombs: Mapping[str, float], curated_written: bool) -> str:
-    if not curated_written:
+def _event_bombs(
+    deck: ScoredDeck, bombs: Mapping[str, float], curated: frozenset[str] | None, source: str | None
+) -> str:
+    if curated is None and source is None:
         return (
-            "Bombs: not assessed. The automatic list needs the 17Lands public Sealed file, "
+            "Bombs: not assessed. The automatic list needs more games in pasted win rates, "
             "and the group's curated list is not written yet."
         )
     names = [e.card.front_name for e in deck.spells if e.card.front_name in bombs]
     if not names:
-        return "Bombs: none from the group's curated list."
-    return f"Bombs: {', '.join(names)} (the group's curated list)."
+        return "Bombs: none in this deck."
+    origin = {
+        n: "the group's list" if curated and n in curated else f"automatic, from {source}"
+        for n in names
+    }
+    return "Bombs: " + "; ".join(f"{n} ({origin[n]})" for n in names) + "."
 
 
 def _basis_sentence(deck: ScoredDeck) -> str:
@@ -307,7 +313,10 @@ def _event_comparison(deck: ScoredDeck, other: ScoredDeck, grades_only: bool) ->
 
 
 def describe_event(
-    decks: Sequence[ScoredDeck], bombs: Mapping[str, float], curated_written: bool
+    decks: Sequence[ScoredDeck],
+    bombs: Mapping[str, float],
+    curated: frozenset[str] | None,
+    source: str | None = None,
 ) -> tuple[ScoredDeck, ...]:
     """Attach explanations to decks valued in event mode (decision 0007). Pure.
 
@@ -317,7 +326,7 @@ def describe_event(
     described = []
     for i, deck in enumerate(decks):
         grades_only = all(v.basis in GRADE_BASES for v in deck.values)
-        sentences = [_basis_sentence(deck), _event_bombs(deck, bombs, curated_written)]
+        sentences = [_basis_sentence(deck), _event_bombs(deck, bombs, curated, source)]
         if deck.splash is not None:
             main = [Color(c) for c in deck.colors]
             splashed = [
