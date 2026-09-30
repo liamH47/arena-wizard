@@ -19,8 +19,8 @@ entry, or an `omit` entry to reach green; `floor_guard` will fail the PR.
 
 ## Code rules
 
-- Python 3.13, uv, ruff (with Google docstrings on everything outside tests), `mypy
-  --strict`. Every function has a docstring and full type hints.
+- Python 3.13, uv, ruff (Google docstrings on public modules, classes, and functions
+  outside tests), `mypy --strict`. Every function has full type hints.
 - Domain objects are `@dataclass(frozen=True, slots=True)`. Pydantic only at the API
   boundary and for settings.
 - Pure core, I/O at the edges: `fetch_*` does I/O, `compute_*` is pure, `main()` only
@@ -32,6 +32,22 @@ entry, or an `omit` entry to reach green; `floor_guard` will fail the PR.
 - Missing data is `None`, never zero. Degrade visibly.
 - Always pass `encoding="utf-8"` (and `newline="\n"` when writing). This host is Windows
   and its default encoding garbles card names like "Dáin" without raising.
+
+## Conciseness
+
+A human reviews every PR, so less code is better code when it meets the rules above.
+
+- Docstrings on public modules, classes, and functions only; one line when the purpose is
+  obvious. Private `_helpers` need none unless something is surprising. No comment that
+  restates the code; comment the why.
+- Prefer comprehensions, `any`/`all`, unpacking, and the standard library over loops and
+  hand-rolled helpers. No speculative parameters, wrappers, or abstractions.
+- Tests: `pytest.mark.parametrize` over near-duplicate tests; one behaviour per test; no
+  test for code a single other test already pins. Coverage stays 100%.
+- PRs stay under about 600 changed lines outside tests. Split larger work into slices
+  (`git diff --stat origin/main -- . ':!backend/tests' ':!frontend/e2e'`).
+- Decision records and PR bodies: short. Findings as bullets, not essays.
+- Run the `concise-reviewer` agent on every PR before opening it.
 
 ## Data rules
 
@@ -68,10 +84,12 @@ owner once). Record the result in `docs/decisions/NNNN-slug.md`. Required panels
 - User data: pipeline-integrity-reviewer, edge-case-hunter, event-night-reliability.
 - A new data source or a permission change: data-source-steward,
   pipeline-integrity-reviewer, card-data-verifier.
-- Curated bombs or ratings: sealed-analyst and card-data-verifier, authored before the
-  automatic list is shown, never in the same PR as a scoring change. Never print, quote, or
-  commit automatic bomb names while a set has no curated list.
+- Curated bombs or ratings: sealed-analyst and card-data-verifier, never in the same PR
+  as a scoring change. Automatic bomb names may appear in builds (owner decision,
+  2026-09-30), but never in the eval report or any committed file while a set has no
+  curated list, so the SOS and HOB curated lists can still be written blind.
 - Pages: event-night-ux, edge-case-hunter.
+- Every PR: concise-reviewer.
 
 ## Git
 
