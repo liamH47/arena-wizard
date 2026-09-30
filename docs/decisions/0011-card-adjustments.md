@@ -42,6 +42,21 @@ test-architect.
   identical concurrent saves both log, and the stored row is still right.
 - **A named-constraint race test.** The retry test covers the race.
 
+## The page (event-night-ux, edge-case-hunter)
+
+**How adjusting works:**
+- Each card value in "Why this deck" has an Adjust form, prefilled with what the group has
+  saved. So a save never silently erases a friend's value or note.
+- Saving does not reload the build: the deck being piloted keeps its list and result form,
+  and the change applies at the next "Build again".
+- Save waits while a build is running, and Clear needs something to clear.
+- Pastes lists the set's adjustments, with who, when, and Clear.
+
+**Rejected:**
+- **Moving Adjust off the deck page** (event-night-ux). The approved plan puts it in the
+  closed card-values list, which is off the Arena-list path.
+- **A confirm before Clear on Pastes.** The log keeps what was cleared.
+
 ## Not adopted
 
 - **Owner-only edits.** The group is a handful of friends, and the log names every change.

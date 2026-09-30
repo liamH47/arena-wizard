@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 
 import { ApiError, jsonBody, newId, request } from '../api/client'
-import type { Build, Deck, Run } from '../api/types'
+import type { Adjustment, Build, Deck, Run } from '../api/types'
 import { Button, LoadError, Notice } from '../components/ui'
 import { errorText, inputClass } from '../format'
 
@@ -219,12 +219,15 @@ function RecordResult({ buildId, deckIndex }: { buildId: number; deckIndex: numb
 
 // ---- why this deck -------------------------------------------------------------------------
 
-// A group-shared correction to one card (decision 0011). It changes builds only after
-// "Build again", so it never moves a deck the player is already piloting.
-function AdjustCard({ setCode, name, onSaved }: { setCode: string; name: string; onSaved: () => void }) {
-  const [bomb, setBomb] = useState<'' | 'add' | 'remove'>('')
-  const [delta, setDelta] = useState(0)
-  const [note, setNote] = useState('')
+// A group-shared correction to one card (decision 0011), starting from what the group has
+// saved. Saving never reloads the build: the deck being piloted stays as it is, and the
+// change applies at the next "Build again".
+function AdjustCard({ adjust, name }: { adjust: AdjustProps; name: string }) {
+  const { setCode, building } = adjust
+  const current = adjust.saved.get(name)
+  const [bomb, setBomb] = useState<'' | 'add' | 'remove'>(current?.bomb ?? '')
+  const [delta, setDelta] = useState(current?.q_delta ?? 0)
+  const [note, setNote] = useState(current?.note ?? '')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
   const path = `/api/adjustments/${encodeURIComponent(setCode)}/${encodeURIComponent(name)}`
@@ -239,8 +242,8 @@ function AdjustCard({ setCode, name, onSaved }: { setCode: string; name: string;
           ? { method: 'DELETE' }
           : { method: 'PUT', ...jsonBody({ bomb: bomb || null, q_delta: delta || null, note }) },
       )
-      setMessage({ tone: 'ok', text: `${clear ? 'Cleared' : 'Saved'} for the group. Build again to use it.` })
-      onSaved()
+      setMessage({ tone: 'ok', text: `${clear ? 'Cleared' : 'Saved'} for the group; it applies when you build again.` })
+      adjust.refresh()
     } catch (e) {
       setMessage({ tone: 'error', text: errorText(e) })
     } finally {
@@ -282,10 +285,10 @@ function AdjustCard({ setCode, name, onSaved }: { setCode: string; name: string;
         </label>
         {message !== null && <Notice tone={message.tone}>{message.text}</Notice>}
         <div className="flex flex-wrap gap-2">
-          <Button kind="primary" disabled={busy || (bomb === '' && delta === 0)} onClick={() => void save(false)}>
+          <Button kind="primary" disabled={busy || building || (bomb === '' && delta === 0)} onClick={() => void save(false)}>
             Save for the group
           </Button>
-          <Button disabled={busy} onClick={() => void save(true)}>
+          <Button disabled={busy || current === undefined} onClick={() => void save(true)}>
             Clear
           </Button>
         </div>
@@ -294,7 +297,7 @@ function AdjustCard({ setCode, name, onSaved }: { setCode: string; name: string;
   )
 }
 
-function CardValues({ deck, setCode, onAdjusted }: { deck: Deck; setCode: string; onAdjusted: () => void }) {
+function CardValues({ deck, adjust }: { deck: Deck; adjust: AdjustProps }) {
   const values = [...deck.values].sort((a, b) => b.q - a.q || a.name.localeCompare(b.name))
   return (
     <div className="space-y-1">
@@ -320,7 +323,7 @@ function CardValues({ deck, setCode, onAdjusted }: { deck: Deck; setCode: string
                 Adjusted {points(v.adjustment.q_delta)} by {v.adjustment.by}
               </span>
             )}
-            <AdjustCard setCode={setCode} name={v.name} onSaved={onAdjusted} />
+            <AdjustCard adjust={adjust} name={v.name} />
           </li>
         ))}
       </ul>
@@ -328,7 +331,10 @@ function CardValues({ deck, setCode, onAdjusted }: { deck: Deck; setCode: string
   )
 }
 
-function WhyThisDeck({ deck, setCode, onAdjusted }: { deck: Deck; setCode: string; onAdjusted: () => void }) {
+// Saving waits while a build runs, so a build that missed the change is never shown as current.
+type AdjustProps = { setCode: string; saved: Map<string, Adjustment>; refresh: () => void; building: boolean }
+
+function WhyThisDeck({ deck, adjust }: { deck: Deck; adjust: AdjustProps }) {
   return (
     <details className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
       <summary className="min-h-11 cursor-pointer py-2 font-medium">Why this deck</summary>
@@ -353,7 +359,7 @@ function WhyThisDeck({ deck, setCode, onAdjusted }: { deck: Deck; setCode: strin
             ))}
           </dl>
         </div>
-        <CardValues deck={deck} setCode={setCode} onAdjusted={onAdjusted} />
+        <CardValues deck={deck} adjust={adjust} />
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
           {deck.spells
             .filter((s) => s.image_uri !== null)
@@ -379,15 +385,13 @@ function DeckCard({
   rank,
   buildId,
   stale,
-  setCode,
-  onAdjusted,
+  adjust,
 }: {
   deck: Deck
   rank: number
   buildId: number
   stale: boolean
-  setCode: string
-  onAdjusted: () => void
+  adjust: AdjustProps
 }) {
   const [open, setOpen] = useState(rank === 1)
   const summary = tradeOff(deck)
@@ -421,7 +425,7 @@ function DeckCard({
               <RecordResult buildId={buildId} deckIndex={deck.deck_index} />
             </>
           )}
-          <WhyThisDeck deck={deck} setCode={setCode} onAdjusted={onAdjusted} />
+          <WhyThisDeck deck={deck} adjust={adjust} />
         </>
       )}
     </article>
@@ -453,6 +457,16 @@ export default function Decks() {
       live = false
     }
   }, [id, attempt])
+
+  const [adjustments, setAdjustments] = useState(new Map<string, Adjustment>())
+  const setCode = build?.set_code
+  const refreshAdjustments = useCallback(() => {
+    if (setCode === undefined) return
+    request<Adjustment[]>(`/api/adjustments?set_code=${encodeURIComponent(setCode)}`)
+      .then((found) => setAdjustments(new Map(found.map((a) => [a.name, a]))))
+      .catch(() => undefined) // the forms start blank; saving still works
+  }, [setCode])
+  useEffect(refreshAdjustments, [refreshAdjustments])
 
   const reload = useCallback(() => {
     setError(null)
@@ -516,8 +530,7 @@ export default function Decks() {
                 rank={i + 1}
                 buildId={build.id}
                 stale={!build.current}
-                setCode={build.set_code}
-                onAdjusted={reload}
+                adjust={{ setCode: build.set_code, saved: adjustments, refresh: refreshAdjustments, building: busy }}
               />
             ))}
           </div>

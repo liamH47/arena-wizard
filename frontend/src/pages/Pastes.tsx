@@ -45,15 +45,25 @@ export default function Pastes() {
       .catch((e: unknown) => setResult({ tone: 'error', lines: [errorText(e)] }))
   }, [])
 
-  const load = useCallback(() => {
+  const [loads, setLoads] = useState(0)
+  const load = useCallback(() => setLoads((n) => n + 1), [])
+
+  // A response for a set no longer chosen is dropped, so the lists always match the heading.
+  useEffect(() => {
     if (!setCode) return
-    request<Paste[]>(`/api/pastes?set_code=${encodeURIComponent(setCode)}`)
-      .then(setPastes)
-      .catch((e: unknown) => setResult({ tone: 'error', lines: [errorText(e)] }))
-    request<Adjustment[]>(`/api/adjustments?set_code=${encodeURIComponent(setCode)}`)
-      .then(setAdjustments)
-      .catch((e: unknown) => setResult({ tone: 'error', lines: [errorText(e)] }))
-  }, [setCode])
+    let live = true
+    const failed = (e: unknown) => setResult({ tone: 'error', lines: [errorText(e)] })
+    const query = `?set_code=${encodeURIComponent(setCode)}`
+    request<Paste[]>(`/api/pastes${query}`)
+      .then((found) => live && setPastes(found))
+      .catch(failed)
+    request<Adjustment[]>(`/api/adjustments${query}`)
+      .then((found) => live && setAdjustments(found))
+      .catch(failed)
+    return () => {
+      live = false
+    }
+  }, [setCode, loads])
 
   async function clearAdjustment(name: string) {
     try {
@@ -66,7 +76,6 @@ export default function Pastes() {
     }
   }
 
-  useEffect(load, [load])
 
   const choices = sources.filter((s) => s.dataset === dataset)
   const chosenSource = sourceId === 'own' ? `own-${ownName.trim().toLowerCase()}` : sourceId
