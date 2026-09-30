@@ -11,9 +11,10 @@ the group from set reviews, before the automatic list is shown.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from importlib.resources.abc import Traversable
@@ -22,9 +23,10 @@ from typing import Any
 import yaml
 
 from arena_wizard.domain.cards import Rarity
-from arena_wizard.domain.scoring import BombRules
+from arena_wizard.domain.scoring import BombRules, ScoringConfig
 from arena_wizard.domain.sets import ConfigError
 from arena_wizard.domain.stats import CardCounts
+from arena_wizard.engine.event_values import DataLayer
 from arena_wizard.engine.values import FormatMeans, shrink
 
 PROVENANCE = re.compile(r"own|permission \d{4}")
@@ -154,3 +156,23 @@ def bombs(
         elif entry.action == "remove":
             result.pop(entry.name, None)
     return result
+
+
+def event_bomb_scores(
+    layers: Sequence[DataLayer], rarity_of: Mapping[str, Rarity], config: ScoringConfig
+) -> dict[str, tuple[float, str]]:
+    """Automatic bomb scores from pasted win rates, each card from the most direct layer that
+    has enough games for it, with that layer's name (decision 0010)."""
+    rules = dataclasses.replace(config.bombs, min_games=config.event.bomb_min_games)
+    scored: dict[str, tuple[float, str]] = {}
+    for layer in reversed(layers):
+        scores = bomb_scores(
+            layer.snapshot.cards,
+            rarity_of,
+            layer.means,
+            rules,
+            config.shrinkage.prior_games,
+            config.shrinkage.iwd_prior_games,
+        )
+        scored |= {name: (score, layer.name) for name, score in scores.items()}
+    return scored

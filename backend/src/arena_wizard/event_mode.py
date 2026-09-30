@@ -18,7 +18,7 @@ from arena_wizard.domain.pool import Pool
 from arena_wizard.domain.scoring import EventScoring, ScoringConfig
 from arena_wizard.domain.sets import EventType, SetConfig
 from arena_wizard.domain.stats import Snapshot
-from arena_wizard.engine.bombs import CuratedBomb
+from arena_wizard.engine.bombs import CuratedBomb, event_bomb_scores
 from arena_wizard.engine.builder import build_decks, prepare_event_inputs
 from arena_wizard.engine.event_values import DataLayer, data_layer
 from arena_wizard.engine.explain import arena_list, describe_event, value_line
@@ -129,13 +129,14 @@ def data_block(
     today: dt.date,
     public_embargoed: bool,
     web: bool = False,
+    auto: tuple[str, int] | None = None,
 ) -> list[str]:
     """What this build rests on, what is missing, and how to add it.
 
     `web` turns the CLI commands into directions to the web app's Pastes page, because a
     friend on the web cannot run the CLI and its pastes live in another store.
     """
-    lines = _data_block(config, event, sources, scores, curated, today, public_embargoed)
+    lines = _data_block(config, event, sources, scores, curated, today, public_embargoed, auto)
     if not web:
         return lines
     replaced = []
@@ -168,6 +169,7 @@ def _data_block(
     curated: tuple[CuratedBomb, ...],
     today: dt.date,
     public_embargoed: bool,
+    auto: tuple[str, int] | None = None,
 ) -> list[str]:
     """The Data block with the CLI's commands."""
     code = config.code
@@ -220,12 +222,18 @@ def _data_block(
             "--source llu-marc --file PATH   (one reviewer per paste)"
         )
     added = [c for c in curated if c.action == "add"]
-    if curated:
-        lines.append(f"  Bombs        used     The group's curated list ({len(added)} cards).")
+    counted = f"{auto[1]} cards" if auto and auto[1] else "none reach the bomb bar"
+    used = ([f"automatic from {auto[0]} ({counted})"] if auto else []) + (
+        [f"the group's curated list ({len(added)} cards)"] if curated else []
+    )
+    if used:
+        text = "; ".join(used)
+        lines.append(f"  Bombs        used     {text[0].upper()}{text[1:]}.")
     else:
         lines.append(
-            f"  Bombs        missing  The group's curated list, config/bombs/{code}.yaml, is "
-            "not written; bombs are not assessed."
+            f"  Bombs        missing  The automatic list needs {event.bomb_min_games}+ games in "
+            f"hand per card in pasted win rates; the group's list, config/bombs/{code}.yaml, "
+            "is not written."
         )
     status = "embargoed" if public_embargoed else "missing"
     lines.append(
@@ -300,13 +308,33 @@ def event_result(
         if sources.direct
         else None
     )
+    layers = [layer for layer in (direct, proxy) if layer is not None]
+    scored = event_bomb_scores(layers, rarity_of, scoring)
+    removed = {c.name for c in curated if c.action == "remove"}
+    flagged = {n: src for n, (s, src) in scored.items()
+               if s >= scoring.bombs.threshold and n not in removed}  # fmt: skip
+    used = set(flagged.values()) or {src for _, src in scored.values()}
+    auto = (" and ".join(n.name for n in layers if n.name in used), len(flagged)) if used else None
     lines = tuple(
-        data_block(config, scoring.event, sources, scores, curated, today, public_embargoed, web)
+        data_block(
+            config, scoring.event, sources, scores, curated, today, public_embargoed, web, auto
+        )
     )
     if scores is None and proxy is None and direct is None:
         return EventResult(lines, (), NO_VALUES.format(code=config.code))
-    inputs = prepare_event_inputs(pool, scores, proxy, direct, scoring, curated)
-    decks = describe_event(build_decks(pool, inputs).decks, inputs.bombs, bool(curated))
+    automatic = {name: score for name, (score, _) in scored.items()}
+    inputs = prepare_event_inputs(pool, scores, proxy, direct, scoring, curated, automatic)
+    labels = {n: f"automatic, from {src}" for n, src in flagged.items()} | {
+        c.name: "the group's list" for c in curated if c.action == "add"
+    }
+    assessed = None if curated else frozenset(scored) | labels.keys()
+    decks = describe_event(
+        build_decks(pool, inputs).decks,
+        inputs.bombs,
+        labels,
+        assessed,
+        scoring.event.bomb_min_games,
+    )
     return EventResult(lines, decks, None if decks else NO_DECK)
 
 

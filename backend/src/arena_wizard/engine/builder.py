@@ -16,6 +16,7 @@ import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import combinations
+from types import MappingProxyType
 
 from arena_wizard.domain.cards import WUBRG, Card, Color, Rarity
 from arena_wizard.domain.decks import CardValue, ScoredDeck
@@ -130,8 +131,9 @@ def prepare_event_inputs(
     direct: DataLayer | None,
     config: ScoringConfig,
     curated: tuple[CuratedBomb, ...] = (),
+    automatic: Mapping[str, float] = MappingProxyType({}),
 ) -> BuildInputs:
-    """Value a pool without the public Sealed file (decision 0007). Pure.
+    """Value a pool without the public Sealed file (decisions 0007, 0010). Pure.
 
     Args:
         pool: The pool.
@@ -139,7 +141,8 @@ def prepare_event_inputs(
         proxy: Premier Draft win rates, or None.
         direct: Arena Direct or pasted Sealed win rates, or None.
         config: The scoring configuration.
-        curated: The set's curated bomb list, the only bombs in event mode.
+        curated: The group's curated bomb list.
+        automatic: Automatic bomb scores from pasted win rates (`event_bomb_scores`).
 
     Returns:
         The inputs for `build_decks`, listing at most `config.event.max_decks` decks.
@@ -154,7 +157,7 @@ def prepare_event_inputs(
     return BuildInputs(
         values=values,
         pairs={pair_code(p): pair_value(pair_code(p), None, None, config) for p in PAIRS},
-        bombs=bombs({}, config.bombs.threshold, curated),
+        bombs=bombs(automatic, config.bombs.threshold, curated),
         config=config,
         max_decks=config.event.max_decks,
     )
