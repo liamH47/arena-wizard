@@ -84,7 +84,9 @@ class EventScoring:
     All in q-points. Grades: `center + slope * z` plus the bonuses, with error `sigma`.
     Premier Draft: `proxy_slope` times its own q plus the bonuses, with structural error
     `proxy_sigma` on top of sampling error. The bonuses are the measured amounts by which
-    sealed rewards removal and rares beyond their draft value.
+    sealed rewards removal and rares beyond their draft value. An ungraded card's prior moves
+    `play_slope` q per natural-log unit of its in-hand games over its rarity's median, the
+    log clamped to [`play_floor`, `play_ceiling`] (decision 0012).
     """
 
     center: float
@@ -94,6 +96,9 @@ class EventScoring:
     rare_bonus: float
     proxy_slope: float
     proxy_sigma: float
+    play_slope: float
+    play_floor: float
+    play_ceiling: float
     min_grade_coverage: float
     max_decks: int
     bomb_min_games: int
@@ -166,6 +171,8 @@ def _event(raw: Any) -> EventScoring:
     for name in ("sigma", "proxy_sigma"):
         if getattr(event, name) <= 0:
             raise ConfigError(f"scoring config 'event.{name}' must be above zero")
+    if not event.play_floor <= 0 <= event.play_ceiling:
+        raise ConfigError("scoring config 'event' needs play_floor <= 0 <= play_ceiling")
     if not 0 < event.min_grade_coverage <= 1 or event.max_decks < 1:
         raise ConfigError("scoring config 'event' coverage must be in (0, 1], max_decks >= 1")
     return event

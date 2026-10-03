@@ -5,7 +5,9 @@ by its inverse variance, so a thin sample tightens what is already known instead
 replacing it:
 
 1. the prior: the card's expert grades, or its rarity's average grade when the reviewers
-   skipped it, or, with no grades at all, its rarity's average in the top data layer;
+   skipped it, or, with no grades at all, its rarity's average in the top data layer. An
+   ungraded card's prior moves with how often it is played against its rarity's median:
+   cards drafters rarely play are usually worse (decision 0012);
 2. Premier Draft win rates, scaled to sealed, with a structural draft-to-sealed error;
 3. Arena Direct (or pasted Sealed) win rates, with binomial error.
 
@@ -17,6 +19,7 @@ games, and is left out when none does.
 from __future__ import annotations
 
 import math
+import statistics
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -37,6 +40,7 @@ class DataLayer:
     snapshot: Snapshot
     means: FormatMeans
     proxy: bool
+    median_games: Mapping[Rarity, float]
 
 
 def data_layer(
@@ -46,7 +50,14 @@ def data_layer(
     if snapshot is None:
         return None
     means = format_means(snapshot, rarity_of)
-    return None if means is None else DataLayer(name, snapshot, means, proxy)
+    if means is None:
+        return None
+    games: dict[Rarity, list[int]] = {}
+    for card, counts in snapshot.cards.items():
+        if card in rarity_of and counts.games_gih > 0:
+            games.setdefault(rarity_of[card], []).append(counts.games_gih)
+    medians = {rarity: statistics.median(counts) for rarity, counts in games.items()}
+    return DataLayer(name, snapshot, means, proxy, medians)
 
 
 def _bonus(card: Card, config: ScoringConfig) -> float:
@@ -62,31 +73,48 @@ def _usable(counts: CardCounts | None) -> CardCounts | None:
     return counts if counts is not None and counts.games_gih > 0 else None
 
 
+def _play_shift(card: Card, layers: tuple[DataLayer, ...], config: ScoringConfig) -> float:
+    """Points for how often the card is played against its rarity's median, from the layer
+    with the most games for that rarity; a card absent from it counts as never played."""
+    event = config.event
+    layer = max(layers, key=lambda layer: layer.median_games.get(card.rarity, 0), default=None)
+    median = layer.median_games.get(card.rarity) if layer else None
+    if layer is None or median is None:
+        return 0.0
+    counts = layer.snapshot.cards.get(card.front_name)
+    share = math.log(max(counts.games_gih if counts else 0, 1) / median)
+    return event.play_slope * min(max(share, event.play_floor), event.play_ceiling)
+
+
 def _prior(
-    card: Card, grades: GradeScores | None, top: DataLayer | None, config: ScoringConfig
+    card: Card, grades: GradeScores | None, layers: tuple[DataLayer, ...], config: ScoringConfig
 ) -> tuple[float, float, ValueBasis, str]:
     """The chain's starting point: mean, variance, basis, and label."""
     event = config.event
     name = card.front_name
+    if grades is not None and name in grades.z:
+        mean = event.center + event.slope * grades.z[name] + _bonus(card, config)
+        return mean, event.sigma**2, ValueBasis.GRADES, "draft grades"
+    shift = _play_shift(card, layers, config)
+    played = f", {shift:+.1f} for how often it is played" if abs(shift) >= 0.05 else ""
     if grades is not None:
-        if name in grades.z:
-            mean = event.center + event.slope * grades.z[name] + _bonus(card, config)
-            return mean, event.sigma**2, ValueBasis.GRADES, "draft grades"
         # An ungraded card sits at its rarity's average grade, one grade spread wide.
         z = grades.rarity_z.get(card.rarity, 0.0)
-        mean = event.center + event.slope * z + _bonus(card, config)
+        mean = event.center + event.slope * z + _bonus(card, config) + shift
         return (
             mean,
             event.sigma**2 + event.slope**2,
             ValueBasis.RARITY_GRADE,
-            f"{card.rarity.value} average grade",
+            f"{card.rarity.value} average grade{played}",
         )
-    if top is None:
+    if not layers:
         raise ValueError("event values need grades or at least one data layer")
+    top = layers[-1]
     m = top.means.gih
     rarity_mean = top.means.gih_by_rarity.get(card.rarity, m)
     variance = 100**2 * rarity_mean * (1 - rarity_mean) / config.shrinkage.prior_games
-    return 100 * (rarity_mean - m), variance, ValueBasis.RARITY, f"{card.rarity.value} average"
+    label = f"{card.rarity.value} average{played}"
+    return 100 * (rarity_mean - m) + shift, variance, ValueBasis.RARITY, label
 
 
 def _observation(
@@ -141,7 +169,7 @@ def event_value(
         ValueError: There are no grades and no data layers, so nothing values the card.
     """
     layers = tuple(layer for layer in (proxy, direct) if layer is not None)
-    mean0, var0, basis, prior_label = _prior(card, grades, layers[-1] if layers else None, config)
+    mean0, var0, basis, prior_label = _prior(card, grades, layers, config)
     readings: list[tuple[str, float, float, DataLayer]] = []
     for layer in layers:
         counts = _usable(layer.snapshot.cards.get(card.front_name))

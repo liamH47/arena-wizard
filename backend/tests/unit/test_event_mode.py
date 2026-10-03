@@ -246,7 +246,7 @@ def test_win_rates_rank_decks_and_show_each_layers_weight(
     values = [line for line in lines if "% in hand (n=" in line]
     assert values and all(f"{weight} " in line for line in values)
     # With no grades, each card's prior is its rarity's average in the pasted data.
-    assert all(" average " in line for line in values)
+    assert all(" average" in line for line in values)
 
 
 def test_draft_win_rates_with_enough_games_feed_the_automatic_list(tmp_path: Path) -> None:

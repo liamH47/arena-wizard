@@ -101,13 +101,33 @@ def test_an_ungraded_card_of_an_ungraded_rarity_sits_at_the_average_grade() -> N
     assert value.q == pytest.approx(EVENT.center + EVENT.removal_bonus + EVENT.rare_bonus)
 
 
-def test_without_grades_an_unseen_card_takes_its_raritys_average_in_the_data() -> None:
+def test_without_grades_an_unseen_card_starts_below_its_raritys_average() -> None:
     layer = _layer(_even(), proxy=False)
     value = event_value(OTHER, None, None, layer, CONFIG)
     assert value.basis is ValueBasis.RARITY
-    assert value.q == pytest.approx(0.0)
+    # Never played: the log of its share is clamped to the floor (decision 0012).
+    assert value.q == pytest.approx(EVENT.play_slope * EVENT.play_floor)
     assert value.se == pytest.approx(100 * math.sqrt(0.25 / CONFIG.shrinkage.prior_games))
-    assert value.source == "common average"
+    assert value.source == "common average, -6.0 for how often it is played"
+
+
+@pytest.mark.parametrize(
+    ("games", "label"),
+    [
+        (1000, "common average"),  # at its rarity's median
+        (368, "common average, -3.0 for how often it is played"),  # about 1/e of it
+        (100_000, "common average, +3.0 for how often it is played"),  # capped above
+    ],
+)
+def test_an_ungraded_prior_moves_with_how_often_the_card_is_played(games: int, label: str) -> None:
+    cards = _even() | {"Other": CardCounts(games_gih=games, wins_gih=games // 2)}
+    value = event_value(OTHER, None, None, _layer(cards, proxy=False), CONFIG)
+    assert value.layers[0].name == label
+
+
+def test_an_ungraded_card_among_grades_also_starts_lower_when_unplayed() -> None:
+    value = event_value(OTHER, _grades({"Plain": 0.0}), None, _layer(_even(), proxy=True), CONFIG)
+    assert value.layers[0].name == "common average grade, -6.0 for how often it is played"
 
 
 def test_a_direct_reading_combines_with_the_grade_by_inverse_variance() -> None:

@@ -70,6 +70,8 @@ def test_the_event_section_loads_with_its_types() -> None:
         ("min_grade_coverage", 0, "coverage"),
         ("min_grade_coverage", 1.5, "coverage"),
         ("max_decks", 0, "max_decks"),
+        ("play_floor", 0.5, "play_floor"),
+        ("play_ceiling", -0.5, "play_floor"),
     ],
 )
 def test_event_error_terms_and_limits_must_be_usable(field: str, bad: float, message: str) -> None:
