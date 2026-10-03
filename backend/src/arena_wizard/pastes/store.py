@@ -206,9 +206,13 @@ def latest_grades(pastes: Sequence[StoredPaste]) -> tuple[StoredPaste, ...]:
 
 
 def to_snapshot(paste: StoredPaste) -> Snapshot:
-    """Counts from a card-data paste. A count whose rate is blank is left out, never 0 wins."""
+    """Counts from a card-data paste. A count whose rate is blank is never 0 wins: it is kept
+    only as unrated games, which say how often the card is played."""
     cards: dict[str, CardCounts] = {}
+    unrated: dict[str, int] = {}
     for row in paste.card_rows:
+        if row.games_gih and row.gih_wr is None:
+            unrated[row.name] = row.games_gih
         if not row.games_gih or row.gih_wr is None:
             continue
         games_gns = wins_gns = 0
@@ -221,7 +225,7 @@ def to_snapshot(paste: StoredPaste) -> Snapshot:
             wins_gns=wins_gns,
         )
     source = SourceRef(paste.label, None, None, paste.text_sha256, 0)
-    return Snapshot(paste.key.set_code, source, cards, {})
+    return Snapshot(paste.key.set_code, source, cards, {}, unrated)
 
 
 EVENT_NAMES = {

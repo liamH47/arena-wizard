@@ -172,7 +172,7 @@ def test_the_newest_grades_of_each_source_are_chosen_in_source_order() -> None:
     assert latest_grades([_card_paste()]) == ()
 
 
-def test_a_snapshot_keeps_only_counts_with_rates_and_rounds_wins() -> None:
+def test_a_snapshot_rates_only_counts_with_rates_and_keeps_the_rest_as_plays() -> None:
     rows = (
         CardDataRow("Full", "W", "C", 200, 0.5525, 80, 0.4937),
         CardDataRow("No Not Seen Rate", "W", "C", 100, 0.6, 30, None),
@@ -187,6 +187,8 @@ def test_a_snapshot_keeps_only_counts_with_rates_and_rounds_wins() -> None:
         "No Not Seen Rate": CardCounts(games_gih=100, wins_gih=60),
         "No Not Seen Games": CardCounts(games_gih=100, wins_gih=60),
     }
+    # A blank rate keeps its games only as plays, never as 0 wins (decision 0012).
+    assert snapshot.unrated == {"Blank Rate": 40}
     assert snapshot.set_code == "FRA" and snapshot.pairs == {}
     assert snapshot.source.label == "17Lands card data" and snapshot.source.first_day is None
 

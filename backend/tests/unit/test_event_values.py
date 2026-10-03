@@ -5,6 +5,7 @@ Every number is made up. Snapshots are built so the format mean is exactly 0.5.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 
 import pytest
@@ -101,22 +102,23 @@ def test_an_ungraded_card_of_an_ungraded_rarity_sits_at_the_average_grade() -> N
     assert value.q == pytest.approx(EVENT.center + EVENT.removal_bonus + EVENT.rare_bonus)
 
 
-def test_without_grades_an_unseen_card_starts_below_its_raritys_average() -> None:
+def test_without_grades_a_card_missing_from_the_data_takes_its_raritys_average() -> None:
     layer = _layer(_even(), proxy=False)
     value = event_value(OTHER, None, None, layer, CONFIG)
     assert value.basis is ValueBasis.RARITY
-    # Never played: the log of its share is clamped to the floor (decision 0012).
-    assert value.q == pytest.approx(EVENT.play_slope * EVENT.play_floor)
+    # Missing is not known to be unplayed: a new card or a name mismatch (decision 0012).
+    assert value.q == pytest.approx(0.0)
     assert value.se == pytest.approx(100 * math.sqrt(0.25 / CONFIG.shrinkage.prior_games))
-    assert value.source == "common average, -6.0 for how often it is played"
+    assert value.source == "common average, no games in the data"
 
 
 @pytest.mark.parametrize(
     ("games", "label"),
     [
         (1000, "common average"),  # at its rarity's median
-        (368, "common average, -3.0 for how often it is played"),  # about 1/e of it
-        (100_000, "common average, +3.0 for how often it is played"),  # capped above
+        (368, "common average, -3.0: drafters rarely play it"),  # about 1/e of it
+        (10, "common average, -6.0: drafters rarely play it"),  # clamped below
+        (100_000, "common average, +3.0: drafters often play it"),  # clamped above
     ],
 )
 def test_an_ungraded_prior_moves_with_how_often_the_card_is_played(games: int, label: str) -> None:
@@ -125,9 +127,42 @@ def test_an_ungraded_prior_moves_with_how_often_the_card_is_played(games: int, l
     assert value.layers[0].name == label
 
 
-def test_an_ungraded_card_among_grades_also_starts_lower_when_unplayed() -> None:
-    value = event_value(OTHER, _grades({"Plain": 0.0}), None, _layer(_even(), proxy=True), CONFIG)
-    assert value.layers[0].name == "common average grade, -6.0 for how often it is played"
+def test_games_whose_win_rate_was_left_blank_still_count_as_plays() -> None:
+    snapshot = Snapshot("TST", SOURCE, _even(), {}, unrated={"Other": 10})
+    layer = data_layer("x", snapshot, RARITY, False)
+    assert layer is not None
+    value = event_value(OTHER, None, None, layer, CONFIG)
+    assert value.games == 0  # no reading: the rate was blank
+    assert value.q == pytest.approx(EVENT.play_slope * EVENT.play_floor)
+
+
+def test_the_play_median_is_per_rarity_over_rated_and_unrated_plays() -> None:
+    cards = _even() | {
+        "Zero": CardCounts(),
+        "RareA": CardCounts(games_gih=50, wins_gih=25),
+        "Unmapped": CardCounts(games_gih=7, wins_gih=3),
+    }
+    rarity = RARITY | {"Zero": C, "RareA": R, "RareB": R}
+    layer = data_layer("x", Snapshot("TST", SOURCE, cards, {}, {"RareB": 150}), rarity, False)
+    assert layer is not None
+    assert layer.median_games == {C: 1000, R: 100}
+
+
+def test_an_ungraded_card_among_grades_starts_lower_by_its_prior_share_of_the_shift() -> None:
+    cards = _even() | {"Other": CardCounts(games_gih=10, wins_gih=5)}
+    layer, grades = _layer(cards, proxy=True), _grades({"Plain": 0.0})
+    value = event_value(OTHER, grades, layer, None, CONFIG)
+    unshifted = dataclasses.replace(CONFIG, event=dataclasses.replace(EVENT, play_slope=0.0))
+    plain = event_value(OTHER, grades, layer, None, unshifted)
+    assert value.layers[0].name == "common average grade, -6.0: drafters rarely play it"
+    assert value.q - plain.q == pytest.approx(-6.0 * value.layers[0].share)
+
+
+def test_play_rate_comes_from_the_layer_with_the_most_games() -> None:
+    draft = _layer(_even(5000) | {"Other": CardCounts(games_gih=5000, wins_gih=2500)}, proxy=True)
+    thin = _layer(_even(20), proxy=False)
+    value = event_value(OTHER, None, draft, thin, CONFIG)
+    assert value.layers[0].name == "common average"
 
 
 def test_a_direct_reading_combines_with_the_grade_by_inverse_variance() -> None:

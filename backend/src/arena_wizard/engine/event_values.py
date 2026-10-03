@@ -40,6 +40,7 @@ class DataLayer:
     snapshot: Snapshot
     means: FormatMeans
     proxy: bool
+    played: Mapping[str, int]
     median_games: Mapping[Rarity, float]
 
 
@@ -52,12 +53,15 @@ def data_layer(
     means = format_means(snapshot, rarity_of)
     if means is None:
         return None
+    played = {n: c.games_gih for n, c in snapshot.cards.items() if c.games_gih} | dict(
+        snapshot.unrated
+    )
     games: dict[Rarity, list[int]] = {}
-    for card, counts in snapshot.cards.items():
-        if card in rarity_of and counts.games_gih > 0:
-            games.setdefault(rarity_of[card], []).append(counts.games_gih)
+    for card, count in played.items():
+        if card in rarity_of:
+            games.setdefault(rarity_of[card], []).append(count)
     medians = {rarity: statistics.median(counts) for rarity, counts in games.items()}
-    return DataLayer(name, snapshot, means, proxy, medians)
+    return DataLayer(name, snapshot, means, proxy, played, medians)
 
 
 def _bonus(card: Card, config: ScoringConfig) -> float:
@@ -73,17 +77,25 @@ def _usable(counts: CardCounts | None) -> CardCounts | None:
     return counts if counts is not None and counts.games_gih > 0 else None
 
 
-def _play_shift(card: Card, layers: tuple[DataLayer, ...], config: ScoringConfig) -> float:
+def _play_shift(
+    card: Card, layers: tuple[DataLayer, ...], config: ScoringConfig
+) -> tuple[float, str]:
     """Points for how often the card is played against its rarity's median, from the layer
-    with the most games for that rarity; a card absent from it counts as never played."""
+    with the most games for that rarity, and the label's words for it. A card absent from
+    that layer is not known to be unplayed (a new card, a name mismatch), so it moves 0."""
     event = config.event
     layer = max(layers, key=lambda layer: layer.median_games.get(card.rarity, 0), default=None)
     median = layer.median_games.get(card.rarity) if layer else None
     if layer is None or median is None:
-        return 0.0
-    counts = layer.snapshot.cards.get(card.front_name)
-    share = math.log(max(counts.games_gih if counts else 0, 1) / median)
-    return event.play_slope * min(max(share, event.play_floor), event.play_ceiling)
+        return 0.0, ""
+    games = layer.played.get(card.front_name)
+    if games is None:
+        return 0.0, ", no games in the data"
+    share = min(max(math.log(games / median), event.play_floor), event.play_ceiling)
+    shift = event.play_slope * share
+    if abs(shift) < 0.05:
+        return 0.0, ""
+    return shift, f", {shift:+.1f}: drafters {'rarely' if shift < 0 else 'often'} play it"
 
 
 def _prior(
@@ -95,8 +107,7 @@ def _prior(
     if grades is not None and name in grades.z:
         mean = event.center + event.slope * grades.z[name] + _bonus(card, config)
         return mean, event.sigma**2, ValueBasis.GRADES, "draft grades"
-    shift = _play_shift(card, layers, config)
-    played = f", {shift:+.1f} for how often it is played" if abs(shift) >= 0.05 else ""
+    shift, played = _play_shift(card, layers, config)
     if grades is not None:
         # An ungraded card sits at its rarity's average grade, one grade spread wide.
         z = grades.rarity_z.get(card.rarity, 0.0)

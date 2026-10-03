@@ -1,4 +1,4 @@
-# 0012: Unplayed cards start lower
+# 0012: Rarely played cards start lower
 
 Status: accepted 2026-10-03. Owner direction: "assume cards with less games are worse or at
 least unreliable", after a planeswalker tutor topped an FRA build with no planeswalkers.
@@ -8,43 +8,65 @@ least unreliable", after a planeswalker tutor topped an FRA build with no planes
 - **Which cards.** Only cards with no expert grade, whose prior is their rarity's average.
 - **The shift.** The prior moves `play_slope` (3.0) points per natural-log unit of the
   card's in-hand games over its rarity's median.
-- **Which data.** Games come from the layer with the most games, usually draft data.
-- **Limits.** The log is clamped to [-2, +1], and a card absent from the data counts as
-  never played. So an unplayed card starts 6 points lower, and a heavily played one up to
-  3 points higher.
-- **What it doesn't touch.** Graded cards keep their grade, and the eval never runs event
-  mode.
-- **The label.** A value's label says so: "rare average, -6.0 for how often it is played".
+- **Which data.** Games come from the layer with the most games for that rarity, usually
+  draft data.
+- **Limits.** The log is clamped to [-2, +1]: a rarely played card starts up to 6 points
+  lower, and a heavily played one up to 3 points higher.
+- **Blank win rates.** Games whose win rate 17Lands left blank, which is what it does for
+  thin samples, still count as plays. They are kept as `Snapshot.unrated`, never as 0 wins.
+- **Cards missing from the data move 0**, labelled "no games in the data". A new card or a
+  name mismatch is not known to be unplayed.
+- **Graded cards keep their grade:** reviewers already price in playability.
+- **Labels:** "rare average, -6.0: drafters rarely play it".
+- **The eval never runs event mode**, so it is unaffected.
 
 ## Evidence
 
-Counts and fits only, no card names. Inputs are the 17Lands public SOS and HOB Premier Draft
-and Sealed files.
+Inputs are the 17Lands public SOS and HOB Premier Draft and Sealed files, using the first
+10% of draft games by date. Aggregates only, no card names.
 
-**1. Play rate predicts sealed value within a rarity.** Fit: a card's full-season Sealed win
-rate against its rarity's mean, on the log of its draft in-hand games over its rarity's
-median.
+**1. The target cards.** Pooled check on cards with under a quarter of their rarity's
+median plays:
 
-| Set | Draft data | Slope, q per log unit | Correlation |
-|---|---|---|---|
-| SOS | first 10% by date | +3.2 | 0.44 |
-| SOS | full season | +3.2 | 0.53 |
-| HOB | first 10% by date | +5.8 | 0.70 |
-| HOB | full season | +4.9 | 0.76 |
-
-The few cards played under a quarter as often as their rarity's median average 6 to 12
-points below it.
-
-**2. Event-mode values against full-season Sealed.** No grades, early draft data only.
-
-| Set | Draft data | RMSE without | RMSE with | Correlation without | Correlation with |
+| Set | Cards | Pooled Sealed games | Sealed vs rarity (se) | Predicted before | Predicted after |
 |---|---|---|---|---|---|
-| SOS | first 3% | 2.51 | 2.55 | 0.756 | 0.756 |
-| SOS | first 10% | 2.37 | 2.40 | 0.786 | 0.785 |
-| HOB | first 3% | 3.44 | 3.27 | 0.644 | 0.688 |
-| HOB | first 10% | 2.91 | 2.74 | 0.772 | 0.797 |
+| SOS | 45 | 3,075 | -7.6 (0.9) | -2.6 | -6.0 |
+| HOB | 10 | 1,481 | -14.5 (1.3) | -4.8 | -8.3 |
 
-The yardstick needs 300+ Sealed games per card. That leaves out most of the rarely played
-cards this targets, so the table understates the gain for them.
+**2. All well-measured cards.** Cards with 300+ Sealed games; the RMSE change is paired,
+with a 2,000-resample bootstrap over cards:
 
-The slope is set at 3.0, the low end of the measured slopes, because SOS gains nothing.
+| Set | RMSE change | 95% interval |
+|---|---|---|
+| SOS | +0.03 | -0.04 to +0.09 (no detectable change) |
+| HOB | -0.17 | -0.26 to -0.08 (better) |
+
+**3. Play rate predicts value within a rarity.** Slope 3.2 on SOS and 4.9 to 5.8 on HOB, in
+q per log unit; correlation 0.44 to 0.76.
+
+**Caveat.** The slope was chosen at the low end of these same two sets, so this is
+in-sample. FRA's first public file is the out-of-sample check.
+
+## Panel
+
+Reviewed by sealed-analyst, recommendation-auditor (with the sealed-educator lens), and
+test-architect.
+
+**Accepted:**
+- Keep blank-rate plays (sealed-analyst; this was a blocker). Without it, the trigger card's
+  thin paste row was dropped and escaped the change.
+- A card missing from the data moves 0, with a visible label (auditor).
+- Clearer labels.
+- The pooled target-card check and the bootstrap (auditor).
+- Tests for the median per rarity, the choice of layer, and the value in the grades branch
+  (test-architect).
+
+**Deferred:**
+- **Widening the draft reading's error for rarely played cards** (sealed-analyst). In
+  pastes, the thinnest cards have blank rates and so no reading at all. Both sets still
+  predict above actual for rarely played cards, so fit the multiplier with the Phase 2
+  studies.
+- **A third set** (auditor). FRA's public file, when it appears.
+
+**Separate PR:** a rule that depends on the pool, such as a tutor with no targets. That goes
+in the card tag audit (PR5).
