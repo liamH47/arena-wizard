@@ -28,23 +28,6 @@ function dataStatus(lines: string[]): string {
   return parts.length > 0 ? `Data: ${parts.join(' · ')}` : 'Data'
 }
 
-// Cards left out because 17Lands has too few games to give them a win rate (decision 0012).
-function Excluded({ lines }: { lines: string[] }) {
-  const line = lines.find((l) => l.trimStart().startsWith('Excluded'))
-  const names = line?.split(': ').slice(1).join(': ').replace(/\.$/, '')
-  if (names === undefined) return null
-  return (
-    <details className="rounded-md border border-slate-200 bg-white text-sm" data-testid="excluded">
-      <summary className="min-h-11 cursor-pointer px-3 py-2 font-medium">
-        Excluded for low data volume ({names.split(', ').length})
-      </summary>
-      <p className="border-t border-slate-100 p-3 break-words">
-        {names}. No win rate yet; a group adjustment brings a card back.
-      </p>
-    </details>
-  )
-}
-
 function DataBlock({ build }: { build: Build }) {
   const missing = build.refusal !== null || build.data_lines.some((l) => l.includes('missing'))
   return (
@@ -314,6 +297,35 @@ function AdjustCard({ adjust, name }: { adjust: AdjustProps; name: string }) {
   )
 }
 
+// Pool cards 17Lands has too few games to rate (decision 0012). They stay in builds on their
+// rarity's average, pulled down when rarely played; each gets an Adjust form, since a card
+// in no deck has none elsewhere.
+function Unrated({ lines, adjust }: { lines: string[]; adjust: AdjustProps }) {
+  const line = lines.find((l) => l.trimStart().startsWith('Unrated')) ?? ''
+  const [, count, list] = /(\d+) cards?: (.*)\.$/.exec(line) ?? []
+  if (count === undefined || list === undefined) return null
+  const names = list.split('; ')
+  return (
+    <details className="rounded-md border border-slate-200 bg-white text-sm" data-testid="unrated">
+      <summary className="min-h-11 cursor-pointer px-3 py-2 font-medium">No win rate yet ({count})</summary>
+      <div className="space-y-2 border-t border-slate-100 p-3">
+        <p>
+          Too few games for a win rate. These cards are valued at their rarity’s average, lower when drafters rarely
+          play them. Adjust one if the group knows better.
+        </p>
+        <ul className="space-y-1">
+          {names.map((name) => (
+            <li key={name} className="break-words">
+              <span className="font-medium">{name}</span>
+              <AdjustCard adjust={adjust} name={name} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
+  )
+}
+
 function CardValues({ deck, adjust }: { deck: Deck; adjust: AdjustProps }) {
   const values = [...deck.values].sort((a, b) => b.q - a.q || a.name.localeCompare(b.name))
   return (
@@ -538,7 +550,6 @@ export default function Decks() {
             </Notice>
           )}
           <DataBlock build={build} />
-          <Excluded lines={build.data_lines} />
           {build.refusal !== null && <Notice tone="warn">{build.refusal}</Notice>}
           <div className="space-y-6">
             {build.decks.map((deck, i) => (
@@ -552,6 +563,10 @@ export default function Decks() {
               />
             ))}
           </div>
+          <Unrated
+            lines={build.data_lines}
+            adjust={{ setCode: build.set_code, saved: adjustments, refresh: refreshAdjustments, building: busy }}
+          />
           {build.current && <Button onClick={() => void rebuild()} disabled={busy}>{busy ? 'Building…' : 'Build again'}</Button>}
         </>
       )}
