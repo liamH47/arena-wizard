@@ -20,6 +20,18 @@ least unreliable", after a planeswalker tutor topped an FRA build with no planes
 - **Labels:** "rare average, -6.0: drafters rarely play it".
 - **The eval never runs event mode**, so it is unaffected.
 
+## Cards with no win rate are left out (owner, same day)
+
+- **Which cards.** A card whose win rate 17Lands left blank in every pasted layer, because
+  it has too few games.
+- **What happens.** It's left out of every build and listed under "Excluded for low data
+  volume", in the Data block and as a small section on the deck page.
+- **What brings a card back.** A grade or a group adjustment vouches for it.
+- **Why that exception matters.** Rares and mythics are opened less often, so a strong one
+  can still be blank early in a format. Adjusting it brings it back.
+- **Cards missing from the data entirely stay in.** A name mismatch shouldn't silently
+  drop a card.
+
 ## Evidence
 
 Inputs are the 17Lands public SOS and HOB Premier Draft and Sealed files, using the first

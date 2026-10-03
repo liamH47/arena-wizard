@@ -7,6 +7,7 @@ the lines a build prints first, and `build_event` ranks the decks.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import statistics
 from collections.abc import Callable, Sequence
@@ -285,6 +286,23 @@ class EventResult:
     refusal: str | None
 
 
+EXCLUDED = "  Excluded     low data volume, no win rate yet: "
+
+
+def low_volume(
+    pool: Pool,
+    layers: Sequence[DataLayer],
+    scores: GradeScores | None,
+    adjustments: Sequence[Adjustment],
+) -> tuple[str, ...]:
+    """The pool's cards left out of every build: their win rate was left blank for too few
+    games, and no grade or group adjustment vouches for them (owner, decision 0012). Pure."""
+    rated = {name for layer in layers for name in layer.snapshot.cards}
+    blank = {name for layer in layers for name in layer.snapshot.unrated} - rated
+    vouched = set(scores.z if scores else ()) | {a.name for a in adjustments}
+    return tuple(sorted({e.card.front_name for e in pool.entries} & blank - vouched))
+
+
 def event_result(
     config: SetConfig,
     pool: Pool,
@@ -329,6 +347,12 @@ def event_result(
         lines += (
             f"  Adjusted     used     {len(adjustments)} of this pool's cards, by the group.",
         )
+    excluded = low_volume(pool, layers, scores, adjustments)
+    if excluded:
+        pool = dataclasses.replace(
+            pool, entries=tuple(e for e in pool.entries if e.card.front_name not in excluded)
+        )
+        lines += (f"{EXCLUDED}{len(excluded)} cards: {', '.join(excluded)}.",)
     if scores is None and proxy is None and direct is None:
         return EventResult(lines, (), NO_VALUES.format(code=config.code))
     automatic = {name: score for name, (score, _) in scored.items()}

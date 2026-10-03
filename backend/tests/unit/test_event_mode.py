@@ -11,23 +11,31 @@ import pytest
 
 from arena_wizard import commands
 from arena_wizard.catalog import load_packaged_card_table
+from arena_wizard.domain.cards import Rarity
 from arena_wizard.domain.decks import ValueBasis
+from arena_wizard.domain.pool import Pool, PoolEntry
 from arena_wizard.domain.scoring import load_scoring_config
 from arena_wizard.domain.sets import EventType, Format, load_set_config, packaged_set_codes
+from arena_wizard.domain.stats import CardCounts, Snapshot, SourceRef
+from arena_wizard.engine.adjust import Adjustment
 from arena_wizard.engine.bombs import CuratedBomb
+from arena_wizard.engine.event_values import data_layer
 from arena_wizard.engine.export_parser import parse_export
-from arena_wizard.engine.grades import grade_scores
+from arena_wizard.engine.grades import GradeScores, grade_scores
 from arena_wizard.engine.resolver import build_index, resolve_pool
 from arena_wizard.engine.values import spell_rarities
 from arena_wizard.event_mode import (
+    EXCLUDED,
     Sources,
     build_event,
     choose_sources,
     data_block,
     grade_inputs,
+    low_volume,
 )
 from arena_wizard.pastes.parsers import CardDataRow
 from arena_wizard.pastes.store import StoredPaste, read_pastes, to_snapshot
+from tests.engine_fixture import card
 from tests.unit.test_paste_commands import (
     DAY,
     ad_request,
@@ -303,3 +311,59 @@ def test_a_curated_list_names_its_bombs_in_the_decks(tmp_path: Path) -> None:
     assert any(line.startswith("  Bombs: ") and "(the group's list)" in line
                for line in lines)  # fmt: skip
     assert ValueBasis.GRADES.value == "grades"
+
+
+def _blank_rate(body: bytes, names: set[str]) -> bytes:
+    """The export with the named cards' GIH WR left blank, as 17Lands does for thin samples."""
+    header, *rows = body.decode("utf-8").splitlines()
+    at = [c.strip('"') for c in header.split(",")].index("GIH WR")
+
+    def blank(row: str) -> str:
+        cells = row.split(",")
+        if cells[0].strip('"') in names:
+            cells[at] = '""'
+        return ",".join(cells)
+
+    return "\n".join([header, *map(blank, rows)]).encode("utf-8")
+
+
+def test_cards_with_no_win_rate_are_left_out_and_listed(tmp_path: Path) -> None:
+    pool_names = [line.split(" (")[0][2:] for line in _fra_pool_text().splitlines()]
+    thin = {pool_names[0], pool_names[1]}
+    pastes = _stored(tmp_path, (DRAFT, _blank_rate(card_data_csv(draft=True), thin), DAY))
+    status, lines = _build(pastes)
+    assert status == 0
+    (excluded,) = [line for line in lines if line.startswith("  Excluded")]
+    assert excluded == f"{EXCLUDED}2 cards: {', '.join(sorted(thin))}."
+    assert not any(line.lstrip().startswith(tuple(f"{n}:" for n in thin)) for line in lines)
+
+
+@pytest.mark.parametrize(
+    ("grades", "adjusted", "rated_elsewhere", "expected"),
+    [
+        ((), (), False, ("Thin",)),
+        (("Thin",), (), False, ()),  # a grade vouches for it
+        ((), ("Thin",), False, ()),  # so does a group adjustment
+        ((), (), True, ()),  # another layer rates it
+    ],
+)
+def test_only_unvouched_cards_with_no_rate_anywhere_are_left_out(
+    grades: tuple[str, ...],
+    adjusted: tuple[str, ...],
+    rated_elsewhere: bool,
+    expected: tuple[str, ...],
+) -> None:
+    thin, kept = card("Thin", "{1}{W}"), card("Kept", "{1}{W}")
+    pool = Pool("TST", Format.BO1_SEALED, (PoolEntry(thin, 1), PoolEntry(kept, 1)), (), ())
+    rarity = {"Thin": Rarity.COMMON, "Kept": Rarity.COMMON, "Other": Rarity.COMMON}
+    rated = {"Kept": CardCounts(games_gih=900, wins_gih=500)}
+    source = SourceRef("x", None, None, None, 0)
+    layers = [
+        data_layer("draft data", Snapshot("TST", source, rated, {}, {"Thin": 40}), rarity, True)
+    ]
+    if rated_elsewhere:
+        other = rated | {"Thin": CardCounts(games_gih=600, wins_gih=300)}
+        layers.append(data_layer("Arena Direct", Snapshot("TST", source, other, {}), rarity, False))
+    scores = GradeScores({n: 0.0 for n in grades}, {}, {}, ()) if grades else None
+    adjustments = [Adjustment(n, None, 1.0, "", "Bob") for n in adjusted]
+    assert low_volume(pool, [x for x in layers if x], scores, adjustments) == expected

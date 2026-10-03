@@ -28,6 +28,23 @@ function dataStatus(lines: string[]): string {
   return parts.length > 0 ? `Data: ${parts.join(' · ')}` : 'Data'
 }
 
+// Cards left out because 17Lands has too few games to give them a win rate (decision 0012).
+function Excluded({ lines }: { lines: string[] }) {
+  const line = lines.find((l) => l.trimStart().startsWith('Excluded'))
+  const names = line?.split(': ').slice(1).join(': ').replace(/\.$/, '')
+  if (names === undefined) return null
+  return (
+    <details className="rounded-md border border-slate-200 bg-white text-sm" data-testid="excluded">
+      <summary className="min-h-11 cursor-pointer px-3 py-2 font-medium">
+        Excluded for low data volume ({names.split(', ').length})
+      </summary>
+      <p className="border-t border-slate-100 p-3 break-words">
+        {names}. No win rate yet; a group adjustment brings a card back.
+      </p>
+    </details>
+  )
+}
+
 function DataBlock({ build }: { build: Build }) {
   const missing = build.refusal !== null || build.data_lines.some((l) => l.includes('missing'))
   return (
@@ -521,6 +538,7 @@ export default function Decks() {
             </Notice>
           )}
           <DataBlock build={build} />
+          <Excluded lines={build.data_lines} />
           {build.refusal !== null && <Notice tone="warn">{build.refusal}</Notice>}
           <div className="space-y-6">
             {build.decks.map((deck, i) => (
