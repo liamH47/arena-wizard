@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 def rate(wins: int, games: int) -> float | None:
@@ -83,9 +83,14 @@ class SourceRef:
 
 @dataclass(frozen=True, slots=True)
 class Snapshot:
-    """Every card's and every color pair's counts from one source over one window."""
+    """Every card's and every color pair's counts from one source over one window.
+
+    `unrated` holds in-hand games for cards whose win rate the source left blank (17Lands
+    blanks thin samples): too few to rate, but they still say how often the card is played.
+    """
 
     set_code: str
     source: SourceRef
     cards: Mapping[str, CardCounts]
     pairs: Mapping[str, PairCounts]
+    unrated: Mapping[str, int] = field(default_factory=dict)

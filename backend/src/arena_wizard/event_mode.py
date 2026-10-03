@@ -285,6 +285,18 @@ class EventResult:
     refusal: str | None
 
 
+UNRATED = "  Unrated      no win rate yet, too few games: "
+
+
+def unrated(pool: Pool, layers: Sequence[DataLayer]) -> tuple[str, ...]:
+    """The pool's cards whose win rate every layer left blank for too few games. They stay
+    in builds on their prior, and are listed so nobody mistakes them for measured (owner,
+    decision 0012). Pure."""
+    rated = {name for layer in layers for name in layer.snapshot.cards}
+    blank = {name for layer in layers for name in layer.snapshot.unrated} - rated
+    return tuple(sorted({e.card.front_name for e in pool.entries} & blank))
+
+
 def event_result(
     config: SetConfig,
     pool: Pool,
@@ -329,6 +341,8 @@ def event_result(
         lines += (
             f"  Adjusted     used     {len(adjustments)} of this pool's cards, by the group.",
         )
+    if blank := unrated(pool, layers):
+        lines += (f"{UNRATED}{len(blank)} cards: {'; '.join(blank)}.",)
     if scores is None and proxy is None and direct is None:
         return EventResult(lines, (), NO_VALUES.format(code=config.code))
     automatic = {name: score for name, (score, _) in scored.items()}
