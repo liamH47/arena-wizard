@@ -22,8 +22,9 @@ from dataclasses import dataclass
 PARSER_VERSION = 1
 """Stored with every paste; a paste from an older version must be pasted again."""
 REQUIRED_CARD_COLUMNS = ("Name", "# GIH", "GIH WR")
-DRAFT_COLUMNS = ("# Seen", "ALSA", "# Picked", "ATA")
-"""Filled only for draft event types; a sealed export leaves them empty."""
+DRAFT_COLUMNS = ("ALSA", "ATA")
+"""Average pick positions: filled only for drafts. A Sealed export leaves them blank but
+puts small counts in # Seen and # Picked (seen in an FRA export, 2026-10-06)."""
 GRADE_COLUMNS = ("Grade", "Rating", "Tier", "Score")
 LETTER_GRADES = ("F", "D-", "D", "D+", "C-", "C", "C+", "B-", "B", "B+", "A-", "A", "A+")
 """17Lands tier letters, worst first. `SB` (sideboard) ranks one step below `F`."""

@@ -96,8 +96,9 @@ def check_card_data(
         raise PasteRefused("card data must be Arena Direct Sealed, Sealed, or Premier Draft")
     if event_type is not EventType.PREMIER_DRAFT and table.draft_columns_filled:
         raise PasteRefused(
-            f"the export has draft pick columns filled in (# Seen, ALSA, # Picked, ATA), so it "
-            f"is draft data, not {event_type.value}; pass --event-type PremierDraft"
+            f"the export has average pick positions (ALSA, ATA) filled in, so it is draft "
+            f"data, not {event_type.value}; choose Premier Draft as the event type "
+            "(--event-type PremierDraft on the command line)"
         )
     matched, unknown = _resolve_names(table.rows, index, set_code)
     rows = _deduplicate(matched)

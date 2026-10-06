@@ -64,7 +64,8 @@ def card_data_csv(
     for name in [*set_names(code), *extra]:
         games, rate = rng.randint(200, 9000), rng.uniform(0.48, 0.62)
         unseen, unseen_rate = rng.randint(100, 4000), rng.uniform(0.45, 0.56)
-        picks = [str(games * 3), "4.50", str(games), "5.10"] if draft else ["", "", "", ""]
+        # A Sealed export counts seen and picked cards but leaves pick positions blank.
+        picks = [str(games * 3), "4.50", str(games), "5.10"] if draft else ["0", "", "0", ""]
         cells = dict(
             zip(
                 CARD_HEADER,
@@ -207,7 +208,7 @@ REFUSALS = [
     (ad_request(copied_on=dt.date(2026, 9, 28)), card_data_csv(), "before FRA reached Arena"),
     (request(), b"x" * 5_000_001, "is over 5,000,000 bytes"),
     (request(), b"Name,Stars\nA,3", "grade column"),
-    (ad_request(), card_data_csv(draft=True), "draft pick columns"),
+    (ad_request(), card_data_csv(draft=True), "average pick positions"),
     (request(), grades_csv("SOS"), "not FRA cards"),
 ]
 

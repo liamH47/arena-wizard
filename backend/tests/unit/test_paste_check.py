@@ -93,7 +93,7 @@ def test_an_export_with_no_game_in_hand_games_is_refused(rows: list[CardDataRow]
 
 @pytest.mark.parametrize("event", [AD, EventType.SEALED])
 def test_draft_pick_columns_on_a_sealed_paste_are_refused(event: EventType) -> None:
-    with pytest.raises(PasteRefused, match="pass --event-type PremierDraft"):
+    with pytest.raises(PasteRefused, match="choose Premier Draft as the event type"):
         _check(_cards([_row(n) for n in NAMES], draft=True), event)
 
 
