@@ -142,7 +142,9 @@ The following reviewed read-only and in parallel on 2026-09-29:
     path traversal.
 16. **`--event-type` is required for card data, with no default** (four reviewers). It
     must be Arena Direct Sealed, Sealed, or Premier Draft, and it is cross-checked: draft
-    pick columns filled on a sealed paste are refused.
+    pick columns filled on a sealed paste are refused. *Amended 2026-10-06:* a real FRA
+    Sealed export puts small counts in # Seen and # Picked, so only the average pick
+    positions (ALSA, ATA) mark draft data.
 17. **Everything is checked before writing, so a refused paste changes nothing:**
     - at least 90% of rows match the set's cards;
     - rows cover at least 80% of the set's spells;

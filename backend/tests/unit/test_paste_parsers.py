@@ -225,4 +225,7 @@ def test_draft_pick_columns_are_detected_when_filled_and_ignored_when_empty() ->
     assert parse_card_data(_csv(ROW)).draft_columns_filled
     sealed = [ROW[0], "W", "C", "", "", "", "", *ROW[7:]]
     assert not parse_card_data(_csv(sealed)).draft_columns_filled
+    # A real Sealed export counts seen and picked cards but has no average pick positions.
+    counted = [ROW[0], "W", "C", "3", "", "1", "", *ROW[7:]]
+    assert not parse_card_data(_csv(counted)).draft_columns_filled
     assert not parse_card_data("Name\t# GIH\tGIH WR\nCard\t10\t50.0%").draft_columns_filled
